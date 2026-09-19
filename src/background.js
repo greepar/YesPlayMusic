@@ -182,6 +182,8 @@ class Background {
       minWidth: 1080,
       minHeight: 720,
       titleBarStyle: 'hiddenInset',
+      // 让红绿灯与 64px 高的导航栏垂直居中对齐（仅 macOS 生效）
+      trafficLightPosition: { x: 20, y: 25 },
       frame: !(
         isWindows ||
         (isLinux && this.store.get('settings.linuxEnableCustomTitlebar'))

@@ -2,7 +2,7 @@
   <transition name="slide-up">
     <div
       class="lyrics-page"
-      :class="{ 'no-lyric': noLyric }"
+      :class="{ 'no-lyric': noLyric, 'is-mac': isMac }"
       :data-theme="theme"
     >
       <div
@@ -288,7 +288,7 @@
           <svg-icon icon-class="arrow-down" />
         </button>
       </div>
-      <div class="close-button" style="left: 24px" @click="fullscreen">
+      <div class="close-button fullscreen-button" @click="fullscreen">
         <button>
           <svg-icon v-if="isFullscreen" icon-class="fullscreen-exit" />
           <svg-icon v-else icon-class="fullscreen" />
@@ -335,10 +335,14 @@ export default {
       date: this.formatTime(new Date()),
       isFullscreen: !!document.fullscreenElement,
       rightClickLyric: null,
+      colorRequestId: 0,
     };
   },
   computed: {
     ...mapState(['player', 'settings', 'showLyrics']),
+    isMac() {
+      return process.platform === 'darwin';
+    },
     currentTrack() {
       return this.player.currentTrack;
     },
@@ -454,9 +458,13 @@ export default {
     showLyrics(show) {
       if (show) {
         this.setLyricsInterval();
+        this.initDate();
         this.$store.commit('enableScrolling', false);
       } else {
         clearInterval(this.lyricsInterval);
+        this.lyricsInterval = null;
+        clearInterval(this.timer);
+        this.timer = null;
         this.$store.commit('enableScrolling', true);
       }
     },
@@ -464,28 +472,35 @@ export default {
   created() {
     this.getLyric();
     this.getCoverColor();
-    this.initDate();
-    document.addEventListener('keydown', e => {
-      if (e.key === 'F11') {
-        e.preventDefault();
-        this.fullscreen();
-      }
-    });
-    document.addEventListener('fullscreenchange', () => {
-      this.isFullscreen = !!document.fullscreenElement;
-    });
+    if (this.showLyrics) {
+      this.setLyricsInterval();
+      this.initDate();
+    }
+    document.addEventListener('keydown', this.handleFullscreenKeydown);
+    document.addEventListener('fullscreenchange', this.handleFullscreenChange);
   },
   beforeDestroy: function () {
-    if (this.timer) {
-      clearInterval(this.timer);
-    }
-  },
-  destroyed() {
+    this.colorRequestId += 1;
+    clearInterval(this.timer);
     clearInterval(this.lyricsInterval);
+    document.removeEventListener('keydown', this.handleFullscreenKeydown);
+    document.removeEventListener(
+      'fullscreenchange',
+      this.handleFullscreenChange
+    );
   },
   methods: {
     ...mapMutations(['toggleLyrics', 'updateModal']),
     ...mapActions(['likeATrack']),
+    handleFullscreenKeydown(e) {
+      if (e.key === 'F11') {
+        e.preventDefault();
+        this.fullscreen();
+      }
+    },
+    handleFullscreenChange() {
+      this.isFullscreen = !!document.fullscreenElement;
+    },
     initDate() {
       var _this = this;
       clearInterval(this.timer);
@@ -643,15 +658,42 @@ export default {
       }
     },
     setLyricsInterval() {
+      clearInterval(this.lyricsInterval);
       this.lyricsInterval = setInterval(() => {
         const progress = this.player.seek(null, false) ?? 0;
-        let oldHighlightLyricIndex = this.highlightLyricIndex;
-        this.highlightLyricIndex = this.lyric.findIndex((l, index) => {
-          const nextLyric = this.lyric[index + 1];
-          return (
-            progress >= l.time && (nextLyric ? progress < nextLyric.time : true)
-          );
-        });
+        const oldHighlightLyricIndex = this.highlightLyricIndex;
+        let index = oldHighlightLyricIndex;
+
+        if (this.lyric.length === 0 || progress < this.lyric[0].time) {
+          index = -1;
+        } else if (
+          index < 0 ||
+          index >= this.lyric.length ||
+          progress < this.lyric[index].time
+        ) {
+          // Seek/backward jumps use binary search instead of scanning every line.
+          let low = 0;
+          let high = this.lyric.length - 1;
+          while (low <= high) {
+            const middle = (low + high) >> 1;
+            if (this.lyric[middle].time <= progress) {
+              index = middle;
+              low = middle + 1;
+            } else {
+              high = middle - 1;
+            }
+          }
+        } else {
+          // Normal playback only advances across newly reached lines.
+          while (
+            index + 1 < this.lyric.length &&
+            this.lyric[index + 1].time <= progress
+          ) {
+            index += 1;
+          }
+        }
+
+        this.highlightLyricIndex = index;
         if (oldHighlightLyricIndex !== this.highlightLyricIndex) {
           const el = document.getElementById(`line${this.highlightLyricIndex}`);
           if (el)
@@ -674,9 +716,11 @@ export default {
     getCoverColor() {
       if (this.settings.lyricsBackground !== true) return;
       const cover = this.currentTrack.al?.picUrl + '?param=256y256';
+      const requestId = ++this.colorRequestId;
       Vibrant.from(cover, { colorCount: 1 })
         .getPalette()
         .then(palette => {
+          if (requestId !== this.colorRequestId) return;
           const originColor = Color.rgb(palette.DarkMuted._rgb);
           const color = originColor.darken(0.1).rgb().string();
           const color2 = originColor.lighten(0.28).rotate(-30).rgb().string();
@@ -1050,6 +1094,20 @@ export default {
   opacity: 0.28;
   transition: 0.2s;
   -webkit-app-region: no-drag;
+
+  &.fullscreen-button {
+    right: auto;
+    left: 24px;
+  }
+
+  // macOS：左上角是红绿灯（中心线约 32px，与导航栏一致）。
+  // 按钮中心线对齐到同一水平线，全屏按钮让到红绿灯右侧
+  .is-mac & {
+    top: 8px;
+    &.fullscreen-button {
+      left: 84px;
+    }
+  }
 
   .svg-icon {
     color: var(--color-text);
