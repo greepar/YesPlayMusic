@@ -152,31 +152,12 @@ module.exports = {
           publish: ['github'],
         },
         linux: {
+          // 只发布 AppImage（x64 / arm64）。Electron 44 没有 armv7l 的官方构建；
+          // 同时构建多种格式时 electron-builder 的缓存目录会发生竞争
           target: [
             {
               target: 'AppImage',
-              arch: ['x64'],
-            },
-            {
-              target: 'tar.gz',
               arch: ['x64', 'arm64'],
-            },
-            {
-              target: 'deb',
-              // Electron 44 没有 linux-armv7l 的官方构建
-              arch: ['x64', 'arm64'],
-            },
-            {
-              target: 'rpm',
-              arch: ['x64'],
-            },
-            {
-              target: 'snap',
-              arch: ['x64'],
-            },
-            {
-              target: 'pacman',
-              arch: ['x64'],
             },
           ],
           category: 'Music',

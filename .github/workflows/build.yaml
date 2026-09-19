@@ -49,17 +49,11 @@ jobs:
           node-version: 22
           cache: 'yarn'
 
-      - name: Install RPM & Pacman (on Ubuntu)
+      - name: Install icon tools (on Ubuntu)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update &&
-          sudo apt-get install --no-install-recommends -y rpm &&
-          sudo apt-get install --no-install-recommends -y libarchive-tools &&
           sudo apt-get install --no-install-recommends -y libopenjp2-tools
-
-      - name: Install Snapcraft (on Ubuntu)
-        uses: samuelmeuli/action-snapcraft@v3
-        if: runner.os == 'Linux'
 
       - id: get_unm_version
         name: Get the installed UNM version
@@ -117,11 +111,6 @@ jobs:
             dist_electron/*.dmg
             dist_electron/*.exe
             dist_electron/*.AppImage
-            dist_electron/*.deb
-            dist_electron/*.rpm
-            dist_electron/*.snap
-            dist_electron/*.pacman
-            dist_electron/*.tar.gz
           if-no-files-found: error
 
   release:
