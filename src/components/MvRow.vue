@@ -20,7 +20,14 @@
         <div class="title">
           <router-link :to="'/mv/' + getID(mv)">{{ getTitle(mv) }}</router-link>
         </div>
-        <div class="artist" v-html="getSubtitle(mv)"></div>
+        <div class="artist">
+          <router-link
+            v-if="getSubArtist(mv)"
+            :to="`/artist/${getSubArtist(mv).id}`"
+            >{{ getSubArtist(mv).name }}</router-link
+          >
+          <template v-else>{{ getSubtitle(mv) }}</template>
+        </div>
       </div>
     </div>
   </div>
@@ -30,7 +37,7 @@
 export default {
   name: 'CoverVideo',
   props: {
-    mvs: Array,
+    mvs: { type: Array, default: () => [] },
     subtitle: {
       type: String,
       default: 'artist',
@@ -62,21 +69,17 @@ export default {
       if (mv.name !== undefined) return mv.name;
       if (mv.title !== undefined) return mv.title;
     },
+    /** 「歌手」副标题需要一个链接，返回歌手的 id 和名字；其它类型返回 null */
+    getSubArtist(mv) {
+      if (this.subtitle !== 'artist') return null;
+      if (mv.artistName !== undefined)
+        return { id: mv.artistId, name: mv.artistName };
+      if (mv.creator !== undefined)
+        return { id: mv.creator[0].userId, name: mv.creator[0].userName };
+      return { id: 0, name: 'null' };
+    },
     getSubtitle(mv) {
-      if (this.subtitle === 'artist') {
-        let artistName = 'null';
-        let artistID = 0;
-        if (mv.artistName !== undefined) {
-          artistName = mv.artistName;
-          artistID = mv.artistId;
-        } else if (mv.creator !== undefined) {
-          artistName = mv.creator[0].userName;
-          artistID = mv.creator[0].userId;
-        }
-        return `<a href="/artist/${artistID}">${artistName}</a>`;
-      } else if (this.subtitle === 'publishTime') {
-        return mv.publishTime;
-      }
+      if (this.subtitle === 'publishTime') return mv.publishTime;
     },
   },
 };

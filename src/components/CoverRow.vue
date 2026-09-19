@@ -30,7 +30,12 @@
           <router-link :to="getTitleLink(item)">{{ item.name }}</router-link>
         </div>
         <div v-if="type !== 'artist' && subText !== 'none'" class="info">
-          <span v-html="getSubText(item)"></span>
+          <router-link
+            v-if="getSubArtist(item)"
+            :to="`/artist/${getSubArtist(item).id}`"
+            >{{ getSubArtist(item).name }}</router-link
+          >
+          <span v-else>{{ getSubText(item) }}</span>
         </div>
       </div>
     </div>
@@ -67,6 +72,13 @@ export default {
     },
   },
   methods: {
+    /** 「歌手」副标题需要一个链接，返回歌手的 id 和名字；其它类型返回 null */
+    getSubArtist(item) {
+      if (this.subText !== 'artist') return null;
+      if (item.artist !== undefined) return item.artist;
+      if (item.artists !== undefined) return item.artists[0];
+      return null;
+    },
     getSubText(item) {
       if (this.subText === 'copywriter') return item.copywriter;
       if (this.subText === 'description') return item.description;
@@ -74,12 +86,6 @@ export default {
       if (this.subText === 'creator') return 'by ' + item.creator.nickname;
       if (this.subText === 'releaseYear')
         return new Date(item.publishTime).getFullYear();
-      if (this.subText === 'artist') {
-        if (item.artist !== undefined)
-          return `<a href="/artist/${item.artist.id}">${item.artist.name}</a>`;
-        if (item.artists !== undefined)
-          return `<a href="/artist/${item.artists[0].id}">${item.artists[0].name}</a>`;
-      }
       if (this.subText === 'albumType+releaseYear') {
         let albumType = item.type;
         if (item.type === 'EP/Single') {

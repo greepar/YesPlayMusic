@@ -102,11 +102,14 @@
           二维码登录
         </a>
       </div>
+      <!-- 这里渲染的是应用自带的语言文案（含 <br />），不是用户输入，内容固定可信 -->
+      <!-- eslint-disable vue/no-v-html -->
       <div
         v-show="mode !== 'qrCode'"
         class="notice"
         v-html="isElectron ? $t('login.noticeElectron') : $t('login.notice')"
       ></div>
+      <!-- eslint-enable vue/no-v-html -->
     </div>
   </div>
 </template>

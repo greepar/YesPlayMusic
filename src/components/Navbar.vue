@@ -44,10 +44,10 @@
           </div>
         </div>
         <img
-          class="avatar"
           v-virtual-image="avatarUrl"
-          @click="showUserProfileMenu"
+          class="avatar"
           loading="lazy"
+          @click="showUserProfileMenu"
         />
       </div>
     </nav>

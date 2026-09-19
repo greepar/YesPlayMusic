@@ -156,8 +156,8 @@
       <div v-if="isLikeSongsPage" class="user-info">
         <h1>
           <img
-            class="avatar"
             v-virtual-image:512="data.user.avatarUrl"
+            class="avatar"
             loading="lazy"
           />
           {{ data.user.nickname }}{{ $t('library.sLikedSongs') }}

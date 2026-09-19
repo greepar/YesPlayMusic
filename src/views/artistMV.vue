@@ -2,8 +2,8 @@
   <div v-show="show">
     <h1>
       <img
-        class="avatar"
         v-virtual-image:1024="artist.img1v1Url"
+        class="avatar"
         loading="lazy"
       />{{ artist.name }}'s Music Videos
     </h1>

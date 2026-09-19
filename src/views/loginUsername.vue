@@ -32,8 +32,8 @@
             @click="activeUser = user"
           >
             <img
-              class="head"
               v-virtual-image:512="user.avatarUrl"
+              class="head"
               loading="lazy"
             />
             <div class="nickname">

@@ -1,8 +1,8 @@
 <template>
   <div class="fm" :style="{ background }" data-theme="dark">
     <img
-      class="cover"
       v-virtual-image:512="track.album && track.album.picUrl"
+      class="cover"
       loading="lazy"
       @click="goToAlbum"
     />

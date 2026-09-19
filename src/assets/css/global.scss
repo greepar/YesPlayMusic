@@ -152,13 +152,10 @@ a {
 img[data-virtual-image][data-loaded] {
   animation: virtual-image-fade-in 0.32s ease-out;
 }
-@media (prefers-reduced-motion: reduce) {
-  img[data-virtual-image][data-loaded] {
-    animation: none;
-  }
-}
 
 // 页面切换：新页面淡入。
+// 淡入只改变透明度，没有位移和缩放，不属于会引起不适的动效，所以不受系统「减少动态效果」
+// 影响（Windows 关闭动画效果、远程桌面、虚拟机都会被 Chromium 当成 reduce，导致动画消失）。
 // 只淡入不淡出（淡出会让每次切换多等一段时间），只用透明度不用位移
 // （transform 会让页面内 position: fixed 的浮层在动画期间错位）
 @keyframes page-fade-in {
@@ -168,9 +165,4 @@ img[data-virtual-image][data-loaded] {
 }
 main > * {
   animation: page-fade-in 0.18s ease-out;
-}
-@media (prefers-reduced-motion: reduce) {
-  main > * {
-    animation: none;
-  }
 }
