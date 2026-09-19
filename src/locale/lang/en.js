@@ -207,39 +207,12 @@ export default {
       minimizeToTray: 'Minimize to tray',
     },
     enableOsdlyricsSupport: {
+      enable: 'Enable',
       title: 'desktop lyrics support',
       desc1:
         'Only takes effect under Linux. After enabled, it downloads the lyrics file to the local, and tries to launch OSDLyrics at startup.',
       desc2:
         'Please ensure that you have installed OSDLyrics before turning on this.',
-    },
-    unm: {
-      enable: 'Enable',
-      audioSource: {
-        title: 'Audio Sources',
-      },
-      enableFlac: {
-        title: 'Enable FLAC Sources',
-        desc: 'To take effect, it may be required to clear the cache after enabling this function.',
-      },
-      searchMode: {
-        title: 'Audio Search Mode',
-        fast: 'Speed Priority',
-        order: 'Order Priority',
-      },
-      cookie: {
-        joox: 'Cookie for Joox use',
-        qq: 'Cookie for QQ use',
-        desc1: 'Click here for the configuration instruction. ',
-        desc2: 'Leave empty to pick up the default value',
-      },
-      ytdl: 'The youtube-dl Executable File for YtDl',
-      proxy: {
-        title: 'Proxy Server for UNM',
-        desc1:
-          'The proxy server to use for requesting services such as YouTube',
-        desc2: 'Leave empty to pick up the default value',
-      },
     },
   },
   contextMenu: {

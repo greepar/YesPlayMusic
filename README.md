@@ -48,7 +48,6 @@
 - 📻 支持私人 FM / 每日推荐歌曲
 - 🚫🤝 无任何社交功能
 - 🌎️ 海外用户可直接播放（需要登录网易云账号）
-- 🔐 支持 [UnblockNeteaseMusic](https://github.com/UnblockNeteaseMusic/server#音源清单)，自动使用[各类音源](https://github.com/UnblockNeteaseMusic/server#音源清单)替换变灰歌曲链接 （网页版不支持）
   - 「各类音源」指默认启用的音源。
   - YouTube 音源需自行安装 `yt-dlp`。
 - ~~✔️ 每日自动签到（手机端和电脑端同时签到）~~

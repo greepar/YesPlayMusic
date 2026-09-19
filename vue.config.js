@@ -100,12 +100,27 @@ module.exports = {
       // 页面由 express 通过 http://localhost:27232 提供，资源用相对路径即可。
       // 默认的 app://./ 在新版 Chromium 下会因跨域（CORS）被拦截导致白屏
       customFileProtocol: './',
-      externals: ['@unblockneteasemusic/rust-napi'],
       builderOptions: {
         productName: 'YesPlayMusic',
         copyright: 'Copyright © YesPlayMusic',
         // compression: "maximum", // 机器好的可以打开，配置压缩，开启后会让 .AppImage 格式的客户端启动缓慢
         asar: true,
+        // 只保留应用支持的语言，去掉 Electron 自带的 200+ 个语言包（约 70MB）。
+        // electron-builder 按文件名匹配：macOS 是 zh_CN.lproj（下划线），
+        // Windows/Linux 是 zh-CN.pak（连字符），且必须保留 en-US.pak 作为兜底，两种写法都要列
+        electronLanguages: [
+          'en',
+          'en-US',
+          'en_US',
+          'zh-CN',
+          'zh_CN',
+          'zh-TW',
+          'zh_TW',
+          'tr',
+        ],
+        // 主进程和渲染进程的代码都已被 webpack 打包，运行时不需要任何 node_modules。
+        // 不加这个白名单时 electron-builder 会把整个依赖树（500+ 个包，160MB）塞进 app.asar
+        files: ['**', '!node_modules/**/*'],
         publish: [
           {
             provider: 'github',
@@ -145,9 +160,10 @@ module.exports = {
               arch: ['x64'],
             },
           ],
-          signtoolOptions: {
-            publisherName: 'YesPlayMusic',
-          },
+          // 没有代码签名证书：跳过签名，但仍然写入图标和版本信息。
+          // （不要用 signAndEditExecutable: false，那会连图标一起丢掉。）
+          // 也不要设置 publisherName：它用于校验已签名构建的自动更新
+          signExecutable: false,
           icon: 'build/icons/icon.ico',
           publish: ['github'],
         },
@@ -165,6 +181,8 @@ module.exports = {
         },
         dmg: {
           icon: 'build/icons/icon.icns',
+          // bzip2 压缩，比默认的 zlib（UDZO）更小
+          format: 'UDBZ',
         },
         nsis: {
           oneClick: true,
