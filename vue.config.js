@@ -1,5 +1,5 @@
-const webpack = require('webpack');
 const path = require('path');
+const webpack = require('webpack');
 function resolve(dir) {
   return path.join(__dirname, dir);
 }
@@ -8,7 +8,7 @@ module.exports = {
   // 生产环境打包不输出 map
   productionSourceMap: false,
   devServer: {
-    disableHostCheck: true,
+    allowedHosts: 'all',
     port: process.env.DEV_SERVER_PORT || 8080,
     proxy: {
       '^/api': {
@@ -43,7 +43,18 @@ module.exports = {
     },
   },
   chainWebpack(config) {
-    config.module.rules.delete('svg');
+    // webpack 5 不再自带 Node 核心模块的 polyfill。
+    // 网页版不会真正用到这些模块（相关代码都在 IS_ELECTRON 分支里），置空即可
+    config.merge({
+      resolve: { fallback: { fs: false, path: false, child_process: false } },
+    });
+    if (!process.env.IS_ELECTRON) {
+      // 网页版里 `process.platform` 之类的用法需要一个浏览器端的 process
+      config
+        .plugin('provide-process')
+        .use(webpack.ProvidePlugin, [{ process: 'process/browser' }]);
+    }
+
     config.module.rule('svg').exclude.add(resolve('src/assets/icons')).end();
     config.module
       .rule('icons')
@@ -63,23 +74,23 @@ module.exports = {
       .loader('node-loader')
       .end();
 
-    config.module
-      .rule('webpack4_es_fallback')
-      .test(/\.js$/)
-      .include.add(/node_modules/)
-      .end()
-      .use('esbuild-loader')
-      .loader('esbuild-loader')
-      .options({ target: 'es2015', format: "cjs" })
-      .end();
-
-    // LimitChunkCountPlugin 可以通过合并块来对块进行后期处理。用以解决 chunk 包太多的问题
-    config.plugin('chunkPlugin').use(webpack.optimize.LimitChunkCountPlugin, [
-      {
-        maxChunks: 3,
-        minChunkSize: 10_000,
-      },
-    ]);
+    // css-loader 6 会把 url(/img/xx.png) 当作文件系统路径去解析。
+    // 这类以 / 开头的地址指向 public/ 下原样提供的静态资源，保持原样即可
+    ['css', 'postcss', 'scss', 'sass'].forEach(name => {
+      const rule = config.module.rules.has(name) && config.module.rule(name);
+      if (!rule) return;
+      ['vue-modules', 'vue', 'normal-modules', 'normal'].forEach(type => {
+        if (!rule.oneOfs.has(type) || !rule.oneOf(type).uses.has('css-loader'))
+          return;
+        rule
+          .oneOf(type)
+          .use('css-loader')
+          .tap(options => ({
+            ...options,
+            url: { filter: url => !url.startsWith('/') },
+          }));
+      });
+    });
   },
   // 添加插件的配置
   pluginOptions: {
@@ -189,16 +200,6 @@ module.exports = {
           'jsbi',
           path.join(__dirname, 'node_modules/jsbi/dist/jsbi-cjs.js')
         );
-
-        config.module
-          .rule('webpack4_es_fallback')
-          .test(/\.js$/)
-          .include.add(/node_modules/)
-          .end()
-          .use('esbuild-loader')
-          .loader('esbuild-loader')
-          .options({ target: 'es2015', format: "cjs" })
-          .end();
       },
       // 渲染线程的配置文件
       chainWebpackRendererProcess: config => {

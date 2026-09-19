@@ -10,8 +10,6 @@ on:
 
 env:
   YARN_INSTALL_NOPT: yarn add --ignore-engines --ignore-platform --ignore-optional
-  # webpack 4 (Vue CLI 4) 在 Node 17+ 上需要 legacy OpenSSL provider
-  NODE_OPTIONS: --openssl-legacy-provider
   VUE_APP_NETEASE_API_URL: /api
   VUE_APP_ELECTRON_API_URL: /api
   VUE_APP_ELECTRON_API_URL_DEV: http://127.0.0.1:10754
@@ -146,6 +144,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: release/*
+          # 所有平台都构建失败时不要创建空的 Release
+          fail_on_unmatched_files: true
           draft: false
           generate_release_notes: true
           body: |
