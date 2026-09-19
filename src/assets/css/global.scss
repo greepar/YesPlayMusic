@@ -135,3 +135,42 @@ a {
 .user-select-none {
   user-select: none;
 }
+
+// 骨架屏的微光动画
+@keyframes skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+// 图片加载完成后的淡入。只写 from：动画结束后回到各组件自己设定的透明度，不会覆盖它们
+@keyframes virtual-image-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+img[data-virtual-image][data-loaded] {
+  animation: virtual-image-fade-in 0.32s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  img[data-virtual-image][data-loaded] {
+    animation: none;
+  }
+}
+
+// 页面切换：新页面淡入。
+// 只淡入不淡出（淡出会让每次切换多等一段时间），只用透明度不用位移
+// （transform 会让页面内 position: fixed 的浮层在动画期间错位）
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+main > * {
+  animation: page-fade-in 0.18s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  main > * {
+    animation: none;
+  }
+}

@@ -1,4 +1,5 @@
 import request from '@/utils/request';
+import { cachePlaylist } from '@/utils/playlistCache';
 import { mapTrackPlayableStatus } from '@/utils/common';
 
 /**
@@ -55,6 +56,8 @@ export function getPlaylistDetail(id, noCache = false) {
         data.playlist.tracks,
         data.privileges || []
       );
+      // 所有歌单详情请求统一写入缓存，歌单页可以立刻用它渲染
+      cachePlaylist(id, data.playlist, data.playlist.tracks);
     }
     return data;
   });

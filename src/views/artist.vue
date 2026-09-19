@@ -2,10 +2,7 @@
   <div v-show="show" class="artist-page">
     <div class="artist-info">
       <div class="head">
-        <img
-          v-virtual-image="artist.img1v1Url | resizeImage(1024)"
-          loading="lazy"
-        />
+        <img v-virtual-image:1024="artist.img1v1Url" loading="lazy" />
       </div>
       <div>
         <div class="name">{{ artist.name }}</div>

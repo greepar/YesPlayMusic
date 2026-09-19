@@ -2,7 +2,7 @@
   <div v-show="show" ref="library">
     <h1>
       <img
-        v-virtual-image="data.user.avatarUrl | resizeImage"
+        v-virtual-image:512="data.user.avatarUrl"
         class="avatar"
         loading="lazy"
       />{{ data.user.nickname }}{{ $t('library.sLibrary') }}

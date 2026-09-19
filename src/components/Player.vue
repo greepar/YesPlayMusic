@@ -26,9 +26,7 @@
       <div class="playing">
         <div class="container" @click.stop>
           <img
-            v-virtual-image="
-              currentTrack.al && currentTrack.al.picUrl | resizeImage(224)
-            "
+            v-virtual-image:224="currentTrack.al && currentTrack.al.picUrl"
             loading="lazy"
             @click="goToAlbum"
           />

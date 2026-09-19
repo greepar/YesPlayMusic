@@ -2,7 +2,7 @@
   <div class="fm" :style="{ background }" data-theme="dark">
     <img
       class="cover"
-      v-virtual-image="track.album && track.album.picUrl | resizeImage(512)"
+      v-virtual-image:512="track.album && track.album.picUrl"
       loading="lazy"
       @click="goToAlbum"
     />

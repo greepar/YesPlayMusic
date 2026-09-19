@@ -3,9 +3,7 @@
     <ContextMenu ref="menu">
       <div v-show="type !== 'cloudDisk'" class="item-info">
         <img
-          v-virtual-image="
-            rightClickedTrackComputed.al.picUrl | resizeImage(224)
-          "
+          v-virtual-image:224="rightClickedTrackComputed.al.picUrl"
           loading="lazy"
         />
         <div class="info">

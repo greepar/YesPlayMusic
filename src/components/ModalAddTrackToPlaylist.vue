@@ -17,10 +17,7 @@
         class="playlist"
         @click="addTrackToPlaylist(playlist.id)"
       >
-        <img
-          v-virtual-image="playlist.coverImgUrl | resizeImage(224)"
-          loading="lazy"
-        />
+        <img v-virtual-image:224="playlist.coverImgUrl" loading="lazy" />
         <div class="info">
           <div class="title">{{ playlist.name }}</div>
           <div class="track-count">{{ playlist.trackCount }} 首</div>
