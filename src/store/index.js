@@ -54,16 +54,30 @@ window
   });
 
 let player = new Player();
+let savePlayerTimer = null;
+let sendPlayerTimer = null;
+const savePlayer = target => {
+  savePlayerTimer = null;
+  target.saveSelfToLocalStorage();
+};
 player = new Proxy(player, {
   set(target, prop, val) {
     // console.log({ prop, val });
     target[prop] = val;
     if (prop === '_howler') return true;
-    target.saveSelfToLocalStorage();
-    target.sendSelfToIpcMain();
+    clearTimeout(savePlayerTimer);
+    savePlayerTimer = setTimeout(() => savePlayer(target), 250);
+    clearTimeout(sendPlayerTimer);
+    sendPlayerTimer = setTimeout(() => {
+      target.sendSelfToIpcMain();
+    }, 50);
     return true;
   },
 });
 store.state.player = player;
+
+window.addEventListener('pagehide', () => {
+  if (savePlayerTimer !== null) savePlayer(player);
+});
 
 export default store;

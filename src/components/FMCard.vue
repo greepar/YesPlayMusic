@@ -47,6 +47,7 @@ export default {
   data() {
     return {
       background: '',
+      colorRequestId: 0,
     };
   },
   computed: {
@@ -74,7 +75,9 @@ export default {
   },
   created() {
     this.getColor();
-    window.ok = this.getColor;
+  },
+  beforeDestroy() {
+    this.colorRequestId += 1;
   },
   methods: {
     play() {
@@ -96,9 +99,11 @@ export default {
         'http://',
         'https://'
       )}?param=512y512`;
+      const requestId = ++this.colorRequestId;
       Vibrant.from(cover, { colorCount: 1 })
         .getPalette()
         .then(palette => {
+          if (requestId !== this.colorRequestId) return;
           const color = Color.rgb(palette.Vibrant._rgb)
             .darken(0.1)
             .rgb()
