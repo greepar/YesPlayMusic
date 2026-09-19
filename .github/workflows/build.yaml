@@ -1,8 +1,5 @@
 name: Release
 
-env:
-  YARN_INSTALL_NOPT: yarn add --ignore-platform --ignore-optional
-
 on:
   push:
     branches:
@@ -11,26 +8,47 @@ on:
       - v*
   workflow_dispatch:
 
-jobs:
-  release:
-    runs-on: ${{ matrix.os }}
-    env:
-      SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.snapcraft_token }}
+env:
+  YARN_INSTALL_NOPT: yarn add --ignore-engines --ignore-platform --ignore-optional
+  # webpack 4 (Vue CLI 4) 在 Node 17+ 上需要 legacy OpenSSL provider
+  NODE_OPTIONS: --openssl-legacy-provider
+  VUE_APP_NETEASE_API_URL: /api
+  VUE_APP_ELECTRON_API_URL: /api
+  VUE_APP_ELECTRON_API_URL_DEV: http://127.0.0.1:10754
+  VUE_APP_LASTFM_API_KEY: 09c55292403d961aa517ff7f5e8a3d9c
+  VUE_APP_LASTFM_API_SHARED_SECRET: 307c9fda32b3904e53654baff215cb67
 
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-22.04]
+        include:
+          - name: mac-arm64
+            os: macos-15
+            args: -m --arm64
+          - name: mac-x64
+            os: macos-15-intel
+            args: -m --x64
+          - name: win
+            os: windows-latest
+            args: -w
+          - name: linux
+            os: ubuntu-22.04
+            args: -l
 
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 16
+          node-version: 22
           cache: 'yarn'
 
       - name: Install RPM & Pacman (on Ubuntu)
@@ -43,14 +61,14 @@ jobs:
 
       - name: Install Snapcraft (on Ubuntu)
         uses: samuelmeuli/action-snapcraft@v3
-        if: startsWith(matrix.os, 'ubuntu')
+        if: runner.os == 'Linux'
 
       - id: get_unm_version
         name: Get the installed UNM version
         run: |
-          yarn --ignore-optional
+          yarn --ignore-engines --ignore-optional
           unm_version=$(node -e "console.log(require('./node_modules/@unblockneteasemusic/rust-napi/package.json').version)")
-          echo "::set-output name=unmver::${unm_version}"
+          echo "unmver=${unm_version}" >> "$GITHUB_OUTPUT"
         shell: bash
 
       - name: Install UNM dependencies for Windows
@@ -78,39 +96,61 @@ jobs:
             @unblockneteasemusic/rust-napi-linux-arm-gnueabihf@${{steps.get_unm_version.outputs.unmver}}
         shell: bash
 
-      - name: Build/release Electron app
-        uses: samuelmeuli/action-electron-builder@v1.6.0
+      - name: Build Electron app
+        # 不在这里发布，由下面的 release job 统一上传，避免多个 job 同时写同一个 Release
+        run: yarn electron:build ${{ matrix.args }}
+        shell: bash
         env:
-          VUE_APP_NETEASE_API_URL: /api
-          VUE_APP_ELECTRON_API_URL: /api
-          VUE_APP_ELECTRON_API_URL_DEV: http://127.0.0.1:10754
-          VUE_APP_LASTFM_API_KEY: 09c55292403d961aa517ff7f5e8a3d9c
-          VUE_APP_LASTFM_API_SHARED_SECRET: 307c9fda32b3904e53654baff215cb67
-        with:
-          # GitHub token, automatically provided to the action
-          # (No need to define this secret in the repo settings)
-          github_token: ${{ secrets.github_token }}
+          # 如需真实签名 + 公证，在仓库 Secrets 里配置 CSC_LINK / CSC_KEY_PASSWORD 即可；
+          # 未配置时 macOS 使用 ad-hoc 签名（见 vue.config.js），避免 Gatekeeper 提示「已损坏」
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
-          # If the commit is tagged with a version (e.g. "v1.0.0"),
-          # release the app after building
-          release: ${{ startsWith(github.ref, 'refs/tags/v') }}
-
-          use_vue_cli: true
+      - name: Verify macOS code signature
+        if: runner.os == 'macOS'
+        run: |
+          app=$(ls -d dist_electron/mac*/YesPlayMusic.app | head -n 1)
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | grep -E "Signature|Authority|flags" || true
 
       - uses: actions/upload-artifact@v4
         with:
-          name: YesPlayMusic-mac
-          path: dist_electron/*-universal.dmg
-          if-no-files-found: ignore
+          name: YesPlayMusic-${{ matrix.name }}
+          path: |
+            dist_electron/*.dmg
+            dist_electron/*.exe
+            dist_electron/*.AppImage
+            dist_electron/*.deb
+            dist_electron/*.rpm
+            dist_electron/*.snap
+            dist_electron/*.pacman
+            dist_electron/*.tar.gz
+          if-no-files-found: error
 
-      - uses: actions/upload-artifact@v4
+  release:
+    name: Publish GitHub Release
+    needs: build
+    # 某个平台失败时，其余平台的产物仍然发布
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
         with:
-          name: YesPlayMusic-win
-          path: dist_electron/*Setup*.exe
-          if-no-files-found: ignore
+          pattern: YesPlayMusic-*
+          path: release
+          merge-multiple: true
 
-      - uses: actions/upload-artifact@v4
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: YesPlayMusic-linux
-          path: dist_electron/*.AppImage
-          if-no-files-found: ignore
+          files: release/*
+          draft: false
+          generate_release_notes: true
+          body: |
+            ### macOS 安装说明
+            - Apple 芯片（M 系列）下载 `arm64`，Intel 芯片下载 `x64`
+            - 应用使用 ad-hoc 签名（未经 Apple 公证）。首次打开如果被拦截：
+              - 在「系统设置 → 隐私与安全性」中点击「仍要打开」，或
+              - 终端执行：`xattr -cr /Applications/YesPlayMusic.app`

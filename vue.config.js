@@ -86,6 +86,9 @@ module.exports = {
     // electron-builder的配置文件
     electronBuilder: {
       nodeIntegration: true,
+      // 页面由 express 通过 http://localhost:27232 提供，资源用相对路径即可。
+      // 默认的 app://./ 在新版 Chromium 下会因跨域（CORS）被拦截导致白屏
+      customFileProtocol: './',
       externals: ['@unblockneteasemusic/rust-napi'],
       builderOptions: {
         productName: 'YesPlayMusic',
@@ -95,7 +98,7 @@ module.exports = {
         publish: [
           {
             provider: 'github',
-            owner: 'qier222',
+            owner: 'greepar',
             repo: 'YesPlayMusic',
             vPrefixedTagName: true,
             releaseType: 'draft',
@@ -108,9 +111,14 @@ module.exports = {
           target: [
             {
               target: 'dmg',
-              arch: ['x64', 'arm64', 'universal'],
+              arch: ['x64', 'arm64'],
             },
           ],
+          // 没有 Developer ID 证书时（如 CI）electron-builder 会直接跳过签名，
+          // 下载后的 arm64 应用会被 Gatekeeper 提示「已损坏」。
+          // 这里显式使用 ad-hoc 签名；提供 CSC_LINK / CSC_NAME 时则使用真实证书。
+          identity: process.env.CSC_LINK || process.env.CSC_NAME ? undefined : '-',
+          hardenedRuntime: !!(process.env.CSC_LINK || process.env.CSC_NAME),
           artifactName: '${productName}-${os}-${version}-${arch}.${ext}',
           category: 'public.app-category.music',
           darkModeSupport: true,
@@ -126,7 +134,9 @@ module.exports = {
               arch: ['x64'],
             },
           ],
-          publisherName: 'YesPlayMusic',
+          signtoolOptions: {
+            publisherName: 'YesPlayMusic',
+          },
           icon: 'build/icons/icon.ico',
           publish: ['github'],
         },
