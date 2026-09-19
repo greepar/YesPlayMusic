@@ -100,6 +100,8 @@ module.exports = {
       // 页面由 express 通过 http://localhost:27232 提供，资源用相对路径即可。
       // 默认的 app://./ 在新版 Chromium 下会因跨域（CORS）被拦截导致白屏
       customFileProtocol: './',
+      // 安装了 TypeScript 插件后，插件默认会去找 src/background.ts，这里显式指定
+      mainProcessFile: 'src/background.js',
       builderOptions: {
         productName: 'YesPlayMusic',
         copyright: 'Copyright © YesPlayMusic',

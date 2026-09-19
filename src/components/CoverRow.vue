@@ -40,6 +40,7 @@
 <script>
 import Cover from '@/components/Cover.vue';
 import ExplicitSymbol from '@/components/ExplicitSymbol.vue';
+import { sizedImageUrl } from '@/utils/imagePerformance';
 
 export default {
   name: 'CoverRow',
@@ -110,8 +111,8 @@ export default {
           return 'https://p2.music.126.net/VnZiScyynLG7atLIZ2YPkw==/18686200114669622.jpg?param=512y512';
         }
       }
-      let img = item.img1v1Url || item.picUrl || item.coverImgUrl;
-      return `${img?.replace('http://', 'https://')}?param=512y512`;
+      const img = item.img1v1Url || item.picUrl || item.coverImgUrl;
+      return sizedImageUrl(img, 384);
     },
   },
 };

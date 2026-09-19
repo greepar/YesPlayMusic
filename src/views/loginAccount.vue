@@ -72,7 +72,7 @@
 
         <div v-show="mode == 'qrCode'">
           <div v-show="qrCodeSvg" class="qr-code-container">
-            <img :src="qrCodeSvg" loading="lazy" />
+            <img v-virtual-image="qrCodeSvg" loading="lazy" />
           </div>
           <div class="qr-code-info">
             {{ qrCodeInformation }}

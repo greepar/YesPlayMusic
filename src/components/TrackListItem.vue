@@ -9,8 +9,9 @@
   >
     <img
       v-if="!isAlbum"
-      :src="imgUrl"
+      v-virtual-image="activeImgUrl"
       loading="lazy"
+      decoding="async"
       :class="{ hover: focus }"
       @click="goToAlbum"
     />
@@ -91,6 +92,11 @@ import ArtistsInLine from '@/components/ArtistsInLine.vue';
 import ExplicitSymbol from '@/components/ExplicitSymbol.vue';
 import { mapState } from 'vuex';
 import { isNil } from 'lodash';
+import { activeImageUrl, sizedImageUrl } from '@/utils/imagePerformance';
+import {
+  isRenderingSuspended,
+  onRenderingStateChange,
+} from '@/utils/renderLifecycle';
 
 export default {
   name: 'TrackListItem',
@@ -106,7 +112,13 @@ export default {
   },
 
   data() {
-    return { hover: false, trackStyle: {} };
+    return {
+      hover: false,
+      trackStyle: {},
+      routeActive: true,
+      renderingSuspended: isRenderingSuspended(),
+      stopRenderingStateListener: null,
+    };
   },
 
   computed: {
@@ -124,7 +136,13 @@ export default {
         this.track?.al?.picUrl ??
         this.track?.album?.picUrl ??
         'https://p2.music.126.net/UeTuwE7pvjBpypWLudqukA==/3132508627578625.jpg';
-      return image + '?param=224y224';
+      return sizedImageUrl(image, 96);
+    },
+    activeImgUrl() {
+      return activeImageUrl(
+        this.imgUrl,
+        this.routeActive && !this.renderingSuspended
+      );
     },
     artists() {
       const { ar, artists } = this.track;
@@ -206,6 +224,25 @@ export default {
     showTrackTime() {
       return this.type !== 'tracklist';
     },
+  },
+
+  created() {
+    this.stopRenderingStateListener = onRenderingStateChange(suspended => {
+      this.renderingSuspended = suspended;
+    });
+  },
+
+  activated() {
+    this.routeActive = true;
+  },
+
+  deactivated() {
+    this.hover = false;
+    this.routeActive = false;
+  },
+
+  beforeDestroy() {
+    this.stopRenderingStateListener?.();
   },
 
   methods: {

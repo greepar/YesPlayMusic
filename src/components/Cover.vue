@@ -16,7 +16,12 @@
           ><svg-icon icon-class="play" />
         </button>
       </div>
-      <img :src="imageUrl" :style="imageStyles" loading="lazy" />
+      <img
+        v-virtual-image="activeImageUrl"
+        :style="imageStyles"
+        loading="lazy"
+        decoding="async"
+      />
       <transition v-if="coverHover || alwaysShowShadow" name="fade">
         <div
           v-show="focus || alwaysShowShadow"
@@ -29,6 +34,15 @@
 </template>
 
 <script>
+import {
+  activeImageUrl as resolveActiveImageUrl,
+  coverShadowStyle,
+} from '@/utils/imagePerformance';
+import {
+  isRenderingSuspended,
+  onRenderingStateChange,
+} from '@/utils/renderLifecycle';
+
 export default {
   props: {
     id: { type: Number, required: true },
@@ -46,6 +60,9 @@ export default {
   data() {
     return {
       focus: false,
+      routeActive: true,
+      renderingSuspended: isRenderingSuspended(),
+      stopRenderingStateListener: null,
     };
   },
   computed: {
@@ -65,11 +82,36 @@ export default {
       return styles;
     },
     shadowStyles() {
-      let styles = {};
-      styles.backgroundImage = `url(${this.imageUrl})`;
-      if (this.type === 'artist') styles.borderRadius = '50%';
-      return styles;
+      return coverShadowStyle(
+        this.imageUrl,
+        !this.renderingSuspended &&
+          this.routeActive &&
+          (this.focus || this.alwaysShowShadow),
+        this.type === 'artist'
+      );
     },
+    activeImageUrl() {
+      return resolveActiveImageUrl(
+        this.imageUrl,
+        this.routeActive && !this.renderingSuspended
+      );
+    },
+  },
+  created() {
+    this.stopRenderingStateListener = onRenderingStateChange(suspended => {
+      this.renderingSuspended = suspended;
+      if (suspended) this.focus = false;
+    });
+  },
+  activated() {
+    this.routeActive = true;
+  },
+  deactivated() {
+    this.focus = false;
+    this.routeActive = false;
+  },
+  beforeDestroy() {
+    this.stopRenderingStateListener?.();
   },
   methods: {
     play() {

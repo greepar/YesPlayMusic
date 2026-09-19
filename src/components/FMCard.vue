@@ -1,9 +1,8 @@
 <template>
   <div class="fm" :style="{ background }" data-theme="dark">
-    <img :src="nextTrackCover" style="display: none" loading="lazy" />
     <img
       class="cover"
-      :src="track.album && track.album.picUrl | resizeImage(512)"
+      v-virtual-image="track.album && track.album.picUrl | resizeImage(512)"
       loading="lazy"
       @click="goToAlbum"
     />
@@ -60,12 +59,6 @@ export default {
     },
     artists() {
       return this.track.artists || this.track.ar || [];
-    },
-    nextTrackCover() {
-      return `${this.player._personalFMNextTrack?.album?.picUrl.replace(
-        'http://',
-        'https://'
-      )}?param=512y512`;
     },
   },
   watch: {

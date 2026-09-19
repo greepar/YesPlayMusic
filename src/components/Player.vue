@@ -26,7 +26,9 @@
       <div class="playing">
         <div class="container" @click.stop>
           <img
-            :src="currentTrack.al && currentTrack.al.picUrl | resizeImage(224)"
+            v-virtual-image="
+              currentTrack.al && currentTrack.al.picUrl | resizeImage(224)
+            "
             loading="lazy"
             @click="goToAlbum"
           />

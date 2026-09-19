@@ -1,13 +1,13 @@
 <template>
   <div id="app" :class="{ 'user-select-none': userSelectNone }">
     <Scrollbar v-show="!showLyrics" ref="scrollbar" />
-    <Navbar v-show="showNavbar" ref="navbar" />
+    <Navbar ref="navbar" />
     <main
       ref="main"
       :style="{ overflow: enableScrolling ? 'auto' : 'hidden' }"
       @scroll="handleScroll"
     >
-      <keep-alive>
+      <keep-alive :max="maxCachedViews">
         <router-view v-if="$route.meta.keepAlive"></router-view>
       </keep-alive>
       <router-view v-if="!$route.meta.keepAlive"></router-view>
@@ -35,6 +35,7 @@ import { ipcRenderer } from './electron/ipcRenderer';
 import { isAccountLoggedIn, isLooseLoggedIn } from '@/utils/auth';
 import Lyrics from './views/lyrics.vue';
 import { mapState } from 'vuex';
+import { MAX_CACHED_VIEWS } from '@/utils/viewPerformance';
 
 export default {
   name: 'App',
@@ -51,6 +52,7 @@ export default {
     return {
       isElectron: process.env.IS_ELECTRON, // true || undefined
       userSelectNone: false,
+      maxCachedViews: MAX_CACHED_VIEWS,
     };
   },
   computed: {
@@ -60,20 +62,13 @@ export default {
     },
     showPlayer() {
       return (
-        [
-          'mv',
-          'loginUsername',
-          'login',
-          'loginAccount',
-          'lastfmCallback',
-        ].includes(this.$route.name) === false
+        ['mv', 'loginUsername', 'login', 'loginAccount'].includes(
+          this.$route.name
+        ) === false
       );
     },
     enablePlayer() {
-      return this.player.enabled && this.$route.name !== 'lastfmCallback';
-    },
-    showNavbar() {
-      return this.$route.name !== 'lastfmCallback';
+      return this.player.enabled;
     },
   },
   created() {

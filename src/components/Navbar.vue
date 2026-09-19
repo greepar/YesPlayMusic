@@ -45,7 +45,7 @@
         </div>
         <img
           class="avatar"
-          :src="avatarUrl"
+          v-virtual-image="avatarUrl"
           @click="showUserProfileMenu"
           loading="lazy"
         />

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import Dexie from 'dexie';
+import { warmCoverHttpCache } from '@/utils/imagePerformance';
 import store from '@/store';
 // import pkg from "../../package.json";
 
@@ -97,13 +98,9 @@ export function cacheTrackSource(trackInfo, url, bitRate, from = 'netease') {
     (trackInfo.ar && trackInfo.ar[0]?.name) ||
     (trackInfo.artists && trackInfo.artists[0]?.name) ||
     'Unknown';
-  let cover = trackInfo.al.picUrl;
-  if (cover.slice(0, 5) !== 'https') {
-    cover = 'https' + cover.slice(4);
-  }
-  axios.get(`${cover}?param=512y512`);
-  axios.get(`${cover}?param=224y224`);
-  axios.get(`${cover}?param=1024y1024`);
+  // One small HTTP-cache warmup replaces three Axios downloads. It avoids
+  // retaining multiple encoded responses or decoded cover bitmaps.
+  warmCoverHttpCache(trackInfo.al.picUrl);
   return axios
     .get(url, {
       responseType: 'arraybuffer',

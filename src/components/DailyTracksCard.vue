@@ -1,6 +1,6 @@
 <template>
   <div class="daily-recommend-card" @click="goToDailyTracks">
-    <img :src="coverUrl" loading="lazy" />
+    <img v-virtual-image="coverUrl" loading="lazy" />
     <div class="container">
       <div class="title-box">
         <div class="title">
@@ -23,6 +23,7 @@ import { mapMutations, mapState, mapActions } from 'vuex';
 import { dailyRecommendTracks } from '@/api/playlist';
 import { isAccountLoggedIn } from '@/utils/auth';
 import sample from 'lodash/sample';
+import { sizedImageUrl } from '@/utils/imagePerformance';
 
 const defaultCovers = [
   'https://p2.music.126.net/0-Ybpa8FrDfRgKYCTJD8Xg==/109951164796696795.jpg',
@@ -38,9 +39,10 @@ export default {
   computed: {
     ...mapState(['dailyTracks']),
     coverUrl() {
-      return `${
-        this.dailyTracks[0]?.al.picUrl || sample(defaultCovers)
-      }?param=1024y1024`;
+      return sizedImageUrl(
+        this.dailyTracks[0]?.al.picUrl || sample(defaultCovers),
+        512
+      );
     },
   },
   created() {

@@ -141,7 +141,7 @@
       <h1>
         <img
           class="avatar"
-          :src="data.user.avatarUrl | resizeImage"
+          v-virtual-image="data.user.avatarUrl | resizeImage"
           loading="lazy"
         />
         {{ data.user.nickname }}{{ $t('library.sLikedSongs') }}

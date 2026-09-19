@@ -33,7 +33,7 @@
           >
             <img
               class="head"
-              :src="user.avatarUrl | resizeImage"
+              v-virtual-image="user.avatarUrl | resizeImage"
               loading="lazy"
             />
             <div class="nickname">

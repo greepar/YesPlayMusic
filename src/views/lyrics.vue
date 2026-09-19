@@ -37,7 +37,7 @@
           </div>
           <div class="cover">
             <div class="cover-container">
-              <img :src="imageUrl" loading="lazy" />
+              <img v-virtual-image="imageUrl" loading="lazy" />
               <div
                 class="shadow"
                 :style="{ backgroundImage: `url(${imageUrl})` }"
@@ -314,6 +314,10 @@ import Color from 'color';
 import { isAccountLoggedIn } from '@/utils/auth';
 import { hasListSource, getListSourcePath } from '@/utils/playList';
 import locale from '@/locale';
+import {
+  isRenderingSuspended,
+  onRenderingStateChange,
+} from '@/utils/renderLifecycle';
 
 export default {
   name: 'Lyrics',
@@ -336,6 +340,8 @@ export default {
       isFullscreen: !!document.fullscreenElement,
       rightClickLyric: null,
       colorRequestId: 0,
+      renderingSuspended: isRenderingSuspended(),
+      stopRenderingStateListener: null,
     };
   },
   computed: {
@@ -456,7 +462,7 @@ export default {
       this.getCoverColor();
     },
     showLyrics(show) {
-      if (show) {
+      if (show && !this.renderingSuspended) {
         this.setLyricsInterval();
         this.initDate();
         this.$store.commit('enableScrolling', false);
@@ -472,15 +478,19 @@ export default {
   created() {
     this.getLyric();
     this.getCoverColor();
-    if (this.showLyrics) {
+    if (this.showLyrics && !this.renderingSuspended) {
       this.setLyricsInterval();
       this.initDate();
     }
+    this.stopRenderingStateListener = onRenderingStateChange(
+      this.handleRenderingStateChange
+    );
     document.addEventListener('keydown', this.handleFullscreenKeydown);
     document.addEventListener('fullscreenchange', this.handleFullscreenChange);
   },
   beforeDestroy: function () {
     this.colorRequestId += 1;
+    this.stopRenderingStateListener?.();
     clearInterval(this.timer);
     clearInterval(this.lyricsInterval);
     document.removeEventListener('keydown', this.handleFullscreenKeydown);
@@ -492,6 +502,17 @@ export default {
   methods: {
     ...mapMutations(['toggleLyrics', 'updateModal']),
     ...mapActions(['likeATrack']),
+    handleRenderingStateChange(suspended) {
+      this.renderingSuspended = suspended;
+      clearInterval(this.timer);
+      clearInterval(this.lyricsInterval);
+      this.timer = null;
+      this.lyricsInterval = null;
+      if (!suspended && this.showLyrics) {
+        this.setLyricsInterval();
+        this.initDate();
+      }
+    },
     handleFullscreenKeydown(e) {
       if (e.key === 'F11') {
         e.preventDefault();

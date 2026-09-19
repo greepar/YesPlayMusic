@@ -2,8 +2,8 @@
   <div v-show="show" ref="library">
     <h1>
       <img
+        v-virtual-image="data.user.avatarUrl | resizeImage"
         class="avatar"
-        :src="data.user.avatarUrl | resizeImage"
         loading="lazy"
       />{{ data.user.nickname }}{{ $t('library.sLibrary') }}
     </h1>
@@ -111,7 +111,7 @@
         </button>
       </div>
 
-      <div v-show="currentTab === 'playlists'">
+      <div v-if="isTabActive('playlists')">
         <div v-if="liked.playlists.length > 1">
           <CoverRow
             :items="filterPlaylists"
@@ -122,7 +122,7 @@
         </div>
       </div>
 
-      <div v-show="currentTab === 'albums'">
+      <div v-if="isTabActive('albums')">
         <CoverRow
           :items="liked.albums"
           type="album"
@@ -131,7 +131,7 @@
         />
       </div>
 
-      <div v-show="currentTab === 'artists'">
+      <div v-if="isTabActive('artists')">
         <CoverRow
           :items="liked.artists"
           type="artist"
@@ -139,11 +139,11 @@
         />
       </div>
 
-      <div v-show="currentTab === 'mvs'">
+      <div v-if="isTabActive('mvs')">
         <MvRow :mvs="liked.mvs" />
       </div>
 
-      <div v-show="currentTab === 'cloudDisk'">
+      <div v-if="isTabActive('cloudDisk')">
         <TrackList
           :id="-8"
           :tracks="liked.cloudDisk"
@@ -154,7 +154,7 @@
         />
       </div>
 
-      <div v-show="currentTab === 'playHistory'">
+      <div v-if="isTabActive('playHistory')">
         <button
           :class="{
             'playHistory-button': true,
@@ -227,6 +227,7 @@ import TrackList from '@/components/TrackList.vue';
 import CoverRow from '@/components/CoverRow.vue';
 import SvgIcon from '@/components/SvgIcon.vue';
 import MvRow from '@/components/MvRow.vue';
+import { isActiveView } from '@/utils/viewPerformance';
 
 /**
  * Pick the lyric part from a string formed in `[timecode] lyric`.
@@ -315,6 +316,9 @@ export default {
   methods: {
     ...mapActions(['showToast']),
     ...mapMutations(['updateModal', 'updateData']),
+    isTabActive(tab) {
+      return isActiveView(this.currentTab, tab);
+    },
     loadData() {
       if (this.liked.songsWithDetails.length > 0) {
         NProgress.done();

@@ -1,4 +1,5 @@
 import store from '@/store';
+import { setRenderingSuspended } from '@/utils/renderLifecycle';
 
 const player = store.state.player;
 
@@ -90,5 +91,9 @@ export function ipcRenderer(vueInstance) {
 
   ipcRenderer.on('setPosition', (event, position) => {
     player._howler.seek(position);
+  });
+
+  ipcRenderer.on('rendering-suspended', (event, suspended) => {
+    setRenderingSuspended(suspended);
   });
 }

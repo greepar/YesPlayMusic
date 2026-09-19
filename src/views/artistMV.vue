@@ -3,7 +3,7 @@
     <h1>
       <img
         class="avatar"
-        :src="artist.img1v1Url | resizeImage(1024)"
+        v-virtual-image="artist.img1v1Url | resizeImage(1024)"
         loading="lazy"
       />{{ artist.name }}'s Music Videos
     </h1>

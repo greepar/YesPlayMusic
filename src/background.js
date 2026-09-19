@@ -20,6 +20,8 @@ import {
 import { createProtocol } from 'vue-cli-plugin-electron-builder/lib';
 import { startNeteaseMusicApi } from './electron/services';
 import { initIpcMain } from './electron/ipcMain.js';
+import { openExternalLinksInBrowser } from './electron/windowOpen';
+import { setWindowRenderingSuspended } from './electron/windowPerformance';
 import { createMenu } from './electron/menu';
 import { createTray } from '@/electron/tray';
 import { createTouchBar } from './electron/touchBar';
@@ -343,29 +345,30 @@ class Background {
       this.window.webContents.send('isMaximized', false);
     });
 
-    this.window.webContents.on('new-window', function (e, url) {
-      e.preventDefault();
-      log('open url');
-      const excludeHosts = ['www.last.fm'];
-      const exclude = excludeHosts.find(host => url.includes(host));
-      if (exclude) {
-        const newWindow = new BrowserWindow({
-          width: 800,
-          height: 600,
-          titleBarStyle: 'default',
-          title: 'YesPlayMusic',
-          webPreferences: {
-            webSecurity: false,
-            nodeIntegration: true,
-            enableRemoteModule: true,
-            contextIsolation: false,
-          },
-        });
-        newWindow.loadURL(url);
-        return;
-      }
-      shell.openExternal(url);
+    this.window.on('minimize', () => {
+      setWindowRenderingSuspended(this.window, true);
     });
+
+    this.window.on('hide', () => {
+      setWindowRenderingSuspended(this.window, true);
+    });
+
+    this.window.on('restore', () => {
+      setWindowRenderingSuspended(this.window, false);
+    });
+
+    this.window.on('show', () => {
+      setWindowRenderingSuspended(this.window, false);
+    });
+
+    this.window.webContents.on('did-finish-load', () => {
+      setWindowRenderingSuspended(
+        this.window,
+        !this.window.isVisible() || this.window.isMinimized()
+      );
+    });
+
+    openExternalLinksInBrowser(this.window, log);
   }
 
   handleAppEvents() {

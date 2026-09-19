@@ -127,11 +127,6 @@ const routes = [
       requireAccountLogin: true,
     },
   },
-  {
-    path: '/lastfm/callback',
-    name: 'lastfmCallback',
-    component: () => import('@/views/lastfmCallback.vue'),
-  },
 ];
 
 const router = new VueRouter({
