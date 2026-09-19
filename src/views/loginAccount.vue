@@ -143,6 +143,7 @@ export default {
       qrCodeKey: '',
       qrCodeSvg: '',
       qrCodeCheckInterval: null,
+      qrUiLocked: false,
       qrCodeInformation: '打开网易云音乐APP扫码登录',
     };
   },
@@ -155,10 +156,15 @@ export default {
     if (['phone', 'email', 'qrCode'].includes(this.$route.query.mode)) {
       this.mode = this.$route.query.mode;
     }
+    if (this.mode === 'qrCode') {
+      window.uiActivityLock?.acquire();
+      this.qrUiLocked = true;
+    }
     this.getQrCodeKey();
   },
   beforeDestroy() {
     clearInterval(this.qrCodeCheckInterval);
+    if (this.qrUiLocked) window.uiActivityLock?.release();
   },
   methods: {
     ...mapMutations(['updateData']),
@@ -292,8 +298,16 @@ export default {
     changeMode(mode) {
       this.mode = mode;
       if (mode === 'qrCode') {
+        if (!this.qrUiLocked) {
+          window.uiActivityLock?.acquire();
+          this.qrUiLocked = true;
+        }
         this.checkQrCodeLogin();
       } else {
+        if (this.qrUiLocked) {
+          window.uiActivityLock?.release();
+          this.qrUiLocked = false;
+        }
         clearInterval(this.qrCodeCheckInterval);
       }
     },

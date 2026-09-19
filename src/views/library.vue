@@ -406,16 +406,20 @@ export default {
     },
     uploadSongToCloudDisk(e) {
       const files = e.target.files;
-      uploadSong(files[0]).then(result => {
-        if (result.code === 200) {
-          let newCloudDisk = this.liked.cloudDisk;
-          newCloudDisk.unshift(result.privateCloud);
-          this.$store.commit('updateLikedXXX', {
-            name: 'cloudDisk',
-            data: newCloudDisk,
-          });
-        }
-      });
+      if (!files[0]) return;
+      window.uiActivityLock?.acquire();
+      uploadSong(files[0])
+        .then(result => {
+          if (result.code === 200) {
+            let newCloudDisk = this.liked.cloudDisk;
+            newCloudDisk.unshift(result.privateCloud);
+            this.$store.commit('updateLikedXXX', {
+              name: 'cloudDisk',
+              data: newCloudDisk,
+            });
+          }
+        })
+        .finally(() => window.uiActivityLock?.release());
     },
   },
 };

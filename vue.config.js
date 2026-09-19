@@ -41,6 +41,12 @@ module.exports = {
       title: 'YesPlayMusic',
       chunks: ['main', 'chunk-vendors', 'chunk-common', 'index'],
     },
+    audio: {
+      entry: 'src/audioHost.ts',
+      template: 'public/audio.html',
+      filename: 'audio.html',
+      chunks: ['chunk-vendors', 'chunk-common', 'audio'],
+    },
   },
   chainWebpack(config) {
     // webpack 5 不再自带 Node 核心模块的 polyfill。
@@ -145,7 +151,8 @@ module.exports = {
           // 没有 Developer ID 证书时（如 CI）electron-builder 会直接跳过签名，
           // 下载后的 arm64 应用会被 Gatekeeper 提示「已损坏」。
           // 这里显式使用 ad-hoc 签名；提供 CSC_LINK / CSC_NAME 时则使用真实证书。
-          identity: process.env.CSC_LINK || process.env.CSC_NAME ? undefined : '-',
+          identity:
+            process.env.CSC_LINK || process.env.CSC_NAME ? undefined : '-',
           hardenedRuntime: !!(process.env.CSC_LINK || process.env.CSC_NAME),
           artifactName: '${productName}-${os}-${version}-${arch}.${ext}',
           category: 'public.app-category.music',

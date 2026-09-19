@@ -68,6 +68,8 @@ export default class {
     this._volumeBeforeMuted = 1; // 用于保存静音前的音量
     this._personalFMLoading = false; // 是否正在私人FM中加载新的track
     this._personalFMNextLoading = false; // 是否正在缓存私人FM的下一首歌曲
+    this._loadGeneration = 0;
+    this._loading = false;
 
     // 播放信息
     this._list = []; // 播放列表
@@ -197,6 +199,9 @@ export default class {
   }
   get progress() {
     return this._progress;
+  }
+  get sourceKind() {
+    return this._howler?._src?.includes('kuwo.cn') ? 'kuwo' : '';
   }
   set progress(value) {
     if (this._howler) {
@@ -363,7 +368,7 @@ export default class {
     // Clean up the previous object URLs since we've created a new one.
     // Revoke object URLs can release the memory taken by a Blob,
     // which occupied a large proportion of memory.
-    for (const url in this.createdBlobRecords) {
+    for (const url of this.createdBlobRecords) {
       URL.revokeObjectURL(url);
     }
 
@@ -407,10 +412,13 @@ export default class {
     autoplay = true,
     ifUnplayableThen = UNPLAYABLE_CONDITION.PLAY_NEXT_TRACK
   ) {
+    const generation = ++this._loadGeneration;
+    this._loading = true;
     if (autoplay && this._currentTrack.name) {
       this._scrobble(this.currentTrack, this._howler?.seek());
     }
     return getTrackDetail(id).then(data => {
+      if (generation !== this._loadGeneration) return false;
       const track = data.songs[0];
       this._currentTrack = track;
       this._updateMediaSessionMetaData(track);
@@ -419,7 +427,9 @@ export default class {
         autoplay,
         true,
         ifUnplayableThen
-      );
+      ).finally(() => {
+        if (generation === this._loadGeneration) this._loading = false;
+      });
     });
   }
   /**

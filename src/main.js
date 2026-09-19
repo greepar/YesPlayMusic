@@ -33,9 +33,10 @@ Vue.config.productionTip = false;
 NProgress.configure({ showSpinner: false, trickleSpeed: 100 });
 dailyTask();
 
-new Vue({
+const app = new Vue({
   i18n,
   store,
   router,
   render: h => h(App),
 }).$mount('#app');
+window.__YESPLAYMUSIC_STORE__ = app.$store;

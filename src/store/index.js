@@ -5,6 +5,7 @@ import mutations from './mutations';
 import actions from './actions';
 import { changeAppearance, changeThemeColor } from '@/utils/common';
 import Player from '@/utils/Player';
+import RemotePlayer from '@/player/RemotePlayer';
 // vuex 自定义插件
 import saveToLocalStorage from './plugins/localStorage';
 import { getSendSettingsPlugin } from './plugins/sendSettings';
@@ -53,31 +54,39 @@ window
     }
   });
 
-let player = new Player();
+const isAudioHost =
+  process.env.IS_ELECTRON === true &&
+  new URLSearchParams(window.location.search).has('audioHost');
+let player =
+  process.env.IS_ELECTRON === true && !isAudioHost
+    ? new RemotePlayer()
+    : new Player();
 let savePlayerTimer = null;
 let sendPlayerTimer = null;
 const savePlayer = target => {
   savePlayerTimer = null;
   target.saveSelfToLocalStorage();
 };
-player = new Proxy(player, {
-  set(target, prop, val) {
-    // console.log({ prop, val });
-    target[prop] = val;
-    if (prop === '_howler') return true;
-    clearTimeout(savePlayerTimer);
-    savePlayerTimer = setTimeout(() => savePlayer(target), 250);
-    clearTimeout(sendPlayerTimer);
-    sendPlayerTimer = setTimeout(() => {
-      target.sendSelfToIpcMain();
-    }, 50);
-    return true;
-  },
-});
+if (!(player instanceof RemotePlayer))
+  player = new Proxy(player, {
+    set(target, prop, val) {
+      // console.log({ prop, val });
+      target[prop] = val;
+      if (prop === '_howler') return true;
+      clearTimeout(savePlayerTimer);
+      savePlayerTimer = setTimeout(() => savePlayer(target), 250);
+      clearTimeout(sendPlayerTimer);
+      sendPlayerTimer = setTimeout(() => {
+        target.sendSelfToIpcMain();
+      }, 50);
+      return true;
+    },
+  });
 store.state.player = player;
 
 window.addEventListener('pagehide', () => {
-  if (savePlayerTimer !== null) savePlayer(player);
+  if (!(player instanceof RemotePlayer) && savePlayerTimer !== null)
+    savePlayer(player);
 });
 
 export default store;

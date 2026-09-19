@@ -14,6 +14,10 @@ export function ipcRenderer(vueInstance) {
   // ipc message channel
   const electron = window.require('electron');
   const ipcRenderer = electron.ipcRenderer;
+  window.uiActivityLock = {
+    acquire: () => ipcRenderer.send('ui:activity-lock', 'acquire'),
+    release: () => ipcRenderer.send('ui:activity-lock', 'release'),
+  };
 
   // listens to the main process 'changeRouteTo' event and changes the route from
   // inside this Vue instance, according to what path the main process requires.
@@ -90,10 +94,25 @@ export function ipcRenderer(vueInstance) {
   });
 
   ipcRenderer.on('setPosition', (event, position) => {
-    player._howler.seek(position);
+    player.seek(position);
   });
 
   ipcRenderer.on('rendering-suspended', (event, suspended) => {
     setRenderingSuspended(suspended);
+  });
+
+  ipcRenderer.on('ui:restore-state', (event, state) => {
+    if (state.showLyrics !== store.state.showLyrics)
+      store.commit('toggleLyrics');
+    self.$nextTick(() => {
+      requestAnimationFrame(() => {
+        const main = document.querySelector('main');
+        if (main) main.scrollTop = state.scrollTop || 0;
+      });
+    });
+  });
+
+  ipcRenderer.on('audio-renderer-failed', () => {
+    store.dispatch('showToast', '音频进程异常退出，自动恢复失败');
   });
 }

@@ -4,6 +4,10 @@ import cloneDeep from 'lodash/cloneDeep';
 import shortcuts from '@/utils/shortcuts';
 import { createMenu } from './menu';
 import { isCreateTray, isMac } from '@/utils/platform';
+import { isPlayerCommand } from '@/player/protocol';
+
+let latestPlayerSnapshot = null;
+export const getLatestPlayerSnapshot = () => latestPlayerSnapshot;
 
 const clc = require('cli-color');
 const log = text => {
@@ -72,7 +76,106 @@ const exitAskWithoutMac = (e, win) => {
 
 const client = require('discord-rich-presence')('818936529484906596');
 
-export function initIpcMain(win, store, trayEventEmitter) {
+export function initIpcMain(
+  win,
+  store,
+  trayEventEmitter,
+  audioWindow,
+  uiLocks
+) {
+  const pendingPlayerCommands = new Map();
+  const completedPlayerCommands = new Map();
+  const isUiSender = event => event.sender.id === win?.webContents.id;
+  const isAudioSender = event =>
+    event.sender.id === audioWindow?.webContents.id;
+
+  ipcMain.on('ui:activity-lock', (event, action) => {
+    if (!isUiSender(event)) return;
+    if (action === 'acquire') uiLocks?.acquire();
+    if (action === 'release') uiLocks?.release();
+  });
+
+  ipcMain.on('player:host-ready', (event, sessionId) => {
+    if (!isAudioSender(event) || typeof sessionId !== 'string') return;
+    win?.webContents.send('player:host-ready', sessionId);
+    if (latestPlayerSnapshot) {
+      event.sender.send('player:restore', latestPlayerSnapshot);
+    }
+  });
+  ipcMain.on('player:snapshot', (event, snapshot) => {
+    if (
+      !isAudioSender(event) ||
+      !snapshot ||
+      typeof snapshot.version !== 'number'
+    )
+      return;
+    if (
+      latestPlayerSnapshot &&
+      latestPlayerSnapshot.sessionId === snapshot.sessionId &&
+      latestPlayerSnapshot.version >= snapshot.version
+    )
+      return;
+    latestPlayerSnapshot = snapshot;
+    win?.webContents.send('player:snapshot', snapshot);
+  });
+  ipcMain.on('player:result', (event, result) => {
+    if (!isAudioSender(event) || !result?.requestId) return;
+    const resolve = pendingPlayerCommands.get(result.requestId);
+    if (resolve) {
+      pendingPlayerCommands.delete(result.requestId);
+      completedPlayerCommands.set(result.requestId, result);
+      if (completedPlayerCommands.size > 100)
+        completedPlayerCommands.delete(
+          completedPlayerCommands.keys().next().value
+        );
+      resolve(result);
+    }
+  });
+  ipcMain.on('player:subscribe', event => {
+    if (!isUiSender(event)) return;
+    if (latestPlayerSnapshot)
+      event.sender.send('player:snapshot', latestPlayerSnapshot);
+    audioWindow?.webContents.send('player:request-snapshot');
+  });
+  ipcMain.handle('player:command', (event, command) => {
+    if (!isUiSender(event) || !isPlayerCommand(command)) {
+      return {
+        requestId: command?.requestId || '',
+        sessionId: '',
+        ok: false,
+        version: latestPlayerSnapshot?.version || 0,
+        error: 'Invalid player command',
+      };
+    }
+    if (completedPlayerCommands.has(command.requestId))
+      return completedPlayerCommands.get(command.requestId);
+    if (!audioWindow || audioWindow.isDestroyed()) {
+      return {
+        requestId: command.requestId,
+        sessionId: '',
+        ok: false,
+        version: latestPlayerSnapshot?.version || 0,
+        error: 'Audio renderer is unavailable',
+      };
+    }
+    return new Promise(resolve => {
+      const timer = setTimeout(() => {
+        pendingPlayerCommands.delete(command.requestId);
+        resolve({
+          requestId: command.requestId,
+          sessionId: latestPlayerSnapshot?.sessionId || '',
+          ok: false,
+          version: latestPlayerSnapshot?.version || 0,
+          error: 'Player command timed out',
+        });
+      }, 10000);
+      pendingPlayerCommands.set(command.requestId, result => {
+        clearTimeout(timer);
+        resolve(result);
+      });
+      audioWindow.webContents.send('player:command', command);
+    });
+  });
   ipcMain.on('close', e => {
     if (isMac) {
       win.hide();
@@ -102,8 +205,9 @@ export function initIpcMain(win, store, trayEventEmitter) {
 
   ipcMain.on('settings', (event, options) => {
     store.set('settings', options);
+    audioWindow?.webContents.send('settings-sync', options);
     if (options.enableGlobalShortcut) {
-      registerGlobalShortcut(win, store);
+      registerGlobalShortcut(win, store, audioWindow);
     } else {
       log('unregister global shortcut');
       globalShortcut.unregisterAll();
@@ -159,7 +263,7 @@ export function initIpcMain(win, store, trayEventEmitter) {
     if (status === 'disable') {
       globalShortcut.unregisterAll();
     } else {
-      registerGlobalShortcut(win, store);
+      registerGlobalShortcut(win, store, audioWindow);
     }
   });
 
@@ -172,7 +276,7 @@ export function initIpcMain(win, store, trayEventEmitter) {
 
     createMenu(win, store);
     globalShortcut.unregisterAll();
-    registerGlobalShortcut(win, store);
+    registerGlobalShortcut(win, store, audioWindow);
   });
 
   ipcMain.on('restoreDefaultShortcuts', () => {
@@ -181,7 +285,7 @@ export function initIpcMain(win, store, trayEventEmitter) {
 
     createMenu(win, store);
     globalShortcut.unregisterAll();
-    registerGlobalShortcut(win, store);
+    registerGlobalShortcut(win, store, audioWindow);
   });
 
   if (isCreateTray) {

@@ -19,7 +19,7 @@ import {
 } from '@/utils/platform';
 import { createProtocol } from 'vue-cli-plugin-electron-builder/lib';
 import { startNeteaseMusicApi } from './electron/services';
-import { initIpcMain } from './electron/ipcMain.js';
+import { getLatestPlayerSnapshot, initIpcMain } from './electron/ipcMain.js';
 import { openExternalLinksInBrowser } from './electron/windowOpen';
 import { setWindowRenderingSuspended } from './electron/windowPerformance';
 import { createMenu } from './electron/menu';
@@ -39,6 +39,57 @@ const clc = require('cli-color');
 const log = text => {
   console.log(`${clc.blueBright('[background.js]')} ${text}`);
 };
+
+class RebuildableWindow {
+  constructor(owner) {
+    this.owner = owner;
+  }
+  get webContents() {
+    return this.owner.window?.webContents || { id: -1, send() {} };
+  }
+  show() {
+    this.owner.restoreWindow();
+  }
+  hide() {
+    this.owner.window?.hide();
+  }
+  minimize() {
+    this.owner.window?.minimize();
+  }
+  maximize() {
+    this.owner.window?.maximize();
+  }
+  unmaximize() {
+    this.owner.window?.unmaximize();
+  }
+  restore() {
+    this.owner.window?.restore();
+  }
+  focus() {
+    this.owner.window?.focus();
+  }
+  isVisible() {
+    return this.owner.window?.isVisible() || false;
+  }
+  isMinimized() {
+    return this.owner.window?.isMinimized() || false;
+  }
+  isMaximized() {
+    return this.owner.window?.isMaximized() || false;
+  }
+}
+
+class RebuildableAudioWindow {
+  constructor(owner) {
+    this.owner = owner;
+  }
+  get webContents() {
+    return this.owner.audioWindow?.webContents || { id: -1, send() {} };
+  }
+  isDestroyed() {
+    return !this.owner.audioWindow || this.owner.audioWindow.isDestroyed();
+  }
+}
 
 const closeOnLinux = (e, win, store) => {
   let closeOpt = store.get('settings.closeAppOption');
@@ -86,6 +137,14 @@ const closeOnLinux = (e, win, store) => {
 class Background {
   constructor() {
     this.window = null;
+    this.windowFacade = new RebuildableWindow(this);
+    this.audioWindow = null;
+    this.audioFacade = new RebuildableAudioWindow(this);
+    this.uiReleaseTimer = null;
+    this.uiActivityLocks = 0;
+    this.destroyingUi = false;
+    this.audioRestarted = false;
+    this.isQuitting = false;
     this.ypmTrayImpl = null;
     this.store = new Store({
       windowWidth: {
@@ -116,6 +175,9 @@ class Background {
     protocol.registerSchemesAsPrivileged([
       { scheme: 'app', privileges: { secure: true, standard: true } },
     ]);
+    // Playback is initiated through IPC, so the hidden audio renderer never
+    // receives a direct pointer gesture of its own.
+    app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
     // handle app events
     this.handleAppEvents();
@@ -158,16 +220,11 @@ class Background {
     expressApp.use('/', express.static(__dirname + '/'));
     expressApp.use('/api', expressProxy('http://127.0.0.1:10754'));
     expressApp.use('/player', (req, res) => {
-      this.window.webContents
-        .executeJavaScript('window.yesplaymusic.player')
-        .then(result => {
-          res.send({
-            currentTrack: result._isPersonalFM
-              ? result._personalFMTrack
-              : result._currentTrack,
-            progress: result._progress,
-          });
-        });
+      const result = getLatestPlayerSnapshot();
+      res.send({
+        currentTrack: result?.currentTrack || null,
+        progress: result?.progress || 0,
+      });
     });
     this.expressApp = expressApp.listen(27232, '127.0.0.1');
   }
@@ -177,6 +234,7 @@ class Background {
 
     const appearance = this.store.get('settings.appearance');
     const showLibraryDefault = this.store.get('settings.showLibraryDefault');
+    const restoredRoute = this.store.get('uiState.route');
 
     const options = {
       width: this.store.get('window.width') || 1440,
@@ -253,7 +311,9 @@ class Background {
     if (process.env.WEBPACK_DEV_SERVER_URL) {
       // Load the url of the dev server if in development mode
       this.window.loadURL(
-        showLibraryDefault
+        restoredRoute
+          ? `${process.env.WEBPACK_DEV_SERVER_URL}/${restoredRoute}`
+          : showLibraryDefault
           ? `${process.env.WEBPACK_DEV_SERVER_URL}/#/library`
           : process.env.WEBPACK_DEV_SERVER_URL
       );
@@ -261,11 +321,99 @@ class Background {
     } else {
       createProtocol('app');
       this.window.loadURL(
-        showLibraryDefault
+        restoredRoute
+          ? `http://localhost:27232/${restoredRoute}`
+          : showLibraryDefault
           ? 'http://localhost:27232/#/library'
           : 'http://localhost:27232'
       );
     }
+    this.handleWindowEvents();
+  }
+
+  cancelUiRelease() {
+    clearTimeout(this.uiReleaseTimer);
+    this.uiReleaseTimer = null;
+  }
+
+  scheduleUiRelease() {
+    this.cancelUiRelease();
+    if (this.store.get('settings.disableUiAutoRelease') === true) return;
+    this.uiReleaseTimer = setTimeout(() => this.releaseUiWindow(), 30000);
+  }
+
+  async releaseUiWindow() {
+    this.uiReleaseTimer = null;
+    const win = this.window;
+    if (!win || win.isDestroyed() || win.isVisible()) return;
+    if (this.uiActivityLocks > 0) return this.scheduleUiRelease();
+    try {
+      const state = await win.webContents.executeJavaScript(`({
+        route: location.hash || '#/',
+        scrollTop: document.querySelector('main')?.scrollTop || 0,
+        showLyrics: !!window.__YESPLAYMUSIC_STORE__?.state?.showLyrics
+      })`);
+      this.store.set('uiState', state);
+      this.destroyingUi = true;
+      win.destroy();
+      this.window = null;
+      this.destroyingUi = false;
+      log('released hidden UI renderer');
+    } catch (error) {
+      log(`failed to snapshot UI renderer: ${error.message}`);
+      setWindowRenderingSuspended(win, true);
+    }
+  }
+
+  restoreWindow() {
+    this.cancelUiRelease();
+    if (!this.window || this.window.isDestroyed()) {
+      this.createWindow();
+      return;
+    }
+    if (this.window.isMinimized()) this.window.restore();
+    this.window.show();
+    this.window.focus();
+  }
+
+  createAudioWindow() {
+    if (this.audioWindow && !this.audioWindow.isDestroyed()) return;
+    this.audioWindow = new BrowserWindow({
+      width: 320,
+      height: 180,
+      show: false,
+      skipTaskbar: true,
+      webPreferences: {
+        webSecurity: false,
+        nodeIntegration: true,
+        enableRemoteModule: false,
+        contextIsolation: false,
+        backgroundThrottling: false,
+      },
+    });
+    const audioUrl = process.env.WEBPACK_DEV_SERVER_URL
+      ? `${process.env.WEBPACK_DEV_SERVER_URL}/audio.html?audioHost=1`
+      : 'http://localhost:27232/audio.html?audioHost=1';
+    this.audioWindow.loadURL(audioUrl);
+    this.audioWindow.on('close', event => {
+      if (!this.isQuitting) event.preventDefault();
+    });
+    this.audioWindow.webContents.on(
+      'render-process-gone',
+      (_event, details) => {
+        log(`audio renderer exited: ${details.reason}`);
+        this.audioWindow = null;
+        if (!this.isQuitting && !this.audioRestarted) {
+          this.audioRestarted = true;
+          this.createAudioWindow();
+        } else if (!this.isQuitting) {
+          this.windowFacade.webContents.send(
+            'audio-renderer-failed',
+            details.reason
+          );
+        }
+      }
+    );
   }
 
   checkForUpdates() {
@@ -298,24 +446,28 @@ class Background {
   }
 
   handleWindowEvents() {
-    this.window.once('ready-to-show', () => {
+    const win = this.window;
+    win.once('ready-to-show', () => {
       log('window ready-to-show event');
-      this.window.show();
-      this.store.set('window', this.window.getBounds());
+      win.show();
+      this.store.set('window', win.getBounds());
+      const state = this.store.get('uiState');
+      if (state) win.webContents.send('ui:restore-state', state);
     });
 
-    this.window.on('close', e => {
+    win.on('close', e => {
       log('window close event');
+      if (this.destroyingUi) return;
 
       if (isLinux) {
-        closeOnLinux(e, this.window, this.store);
+        closeOnLinux(e, win, this.store);
       } else if (isMac) {
         if (this.willQuitApp) {
           this.window = null;
           app.quit();
         } else {
           e.preventDefault();
-          this.window.hide();
+          win.hide();
         }
       } else {
         let closeOpt = this.store.get('settings.closeAppOption');
@@ -324,51 +476,52 @@ class Background {
           app.quit();
         } else {
           e.preventDefault();
-          this.window.hide();
+          win.hide();
         }
       }
     });
 
-    this.window.on('resized', () => {
-      this.store.set('window', this.window.getBounds());
+    win.on('resized', () => {
+      this.store.set('window', win.getBounds());
     });
 
-    this.window.on('moved', () => {
-      this.store.set('window', this.window.getBounds());
+    win.on('moved', () => {
+      this.store.set('window', win.getBounds());
     });
 
-    this.window.on('maximize', () => {
-      this.window.webContents.send('isMaximized', true);
+    win.on('maximize', () => {
+      win.webContents.send('isMaximized', true);
     });
 
-    this.window.on('unmaximize', () => {
-      this.window.webContents.send('isMaximized', false);
+    win.on('unmaximize', () => {
+      win.webContents.send('isMaximized', false);
     });
 
-    this.window.on('minimize', () => {
-      setWindowRenderingSuspended(this.window, true);
+    win.on('minimize', () => {
+      setWindowRenderingSuspended(win, true);
+      this.scheduleUiRelease();
     });
 
-    this.window.on('hide', () => {
-      setWindowRenderingSuspended(this.window, true);
+    win.on('hide', () => {
+      setWindowRenderingSuspended(win, true);
+      this.scheduleUiRelease();
     });
 
-    this.window.on('restore', () => {
-      setWindowRenderingSuspended(this.window, false);
+    win.on('restore', () => {
+      this.cancelUiRelease();
+      setWindowRenderingSuspended(win, false);
     });
 
-    this.window.on('show', () => {
-      setWindowRenderingSuspended(this.window, false);
+    win.on('show', () => {
+      this.cancelUiRelease();
+      setWindowRenderingSuspended(win, false);
     });
 
-    this.window.webContents.on('did-finish-load', () => {
-      setWindowRenderingSuspended(
-        this.window,
-        !this.window.isVisible() || this.window.isMinimized()
-      );
+    win.webContents.on('did-finish-load', () => {
+      setWindowRenderingSuspended(win, !win.isVisible() || win.isMinimized());
     });
 
-    openExternalLinksInBrowser(this.window, log);
+    openExternalLinksInBrowser(win, log);
   }
 
   handleAppEvents() {
@@ -383,25 +536,42 @@ class Background {
         this.initDevtools();
       }
 
+      // The hidden renderer owns Howler and remains alive when the UI is hidden.
+      this.createAudioWindow();
       // create window
       this.createWindow();
-      this.window.once('ready-to-show', () => {
-        this.window.show();
-      });
-      this.handleWindowEvents();
 
       // create tray
       if (isCreateTray) {
         this.trayEventEmitter = new EventEmitter();
         this.ypmTrayImpl = createTray(
-          this.window,
+          this.windowFacade,
           this.trayEventEmitter,
           this.store
         );
       }
 
       // init ipcMain
-      initIpcMain(this.window, this.store, this.trayEventEmitter);
+      initIpcMain(
+        this.windowFacade,
+        this.store,
+        this.trayEventEmitter,
+        this.audioFacade,
+        {
+          acquire: () => {
+            this.uiActivityLocks += 1;
+          },
+          release: () => {
+            this.uiActivityLocks = Math.max(0, this.uiActivityLocks - 1);
+            if (
+              this.uiActivityLocks === 0 &&
+              this.window &&
+              !this.window.isVisible()
+            )
+              this.scheduleUiRelease();
+          },
+        }
+      );
 
       // set proxy
       const proxyRules = this.store.get('proxy');
@@ -415,10 +585,10 @@ class Background {
       this.checkForUpdates();
 
       // create menu
-      createMenu(this.window, this.store);
+      createMenu(this.windowFacade, this.store);
 
       // create dock menu for macOS
-      const createdDockMenu = createDockMenu(this.window);
+      const createdDockMenu = createDockMenu(this.windowFacade);
       if (createDockMenu && app.dock) app.dock.setMenu(createdDockMenu);
 
       // create touch bar
@@ -427,7 +597,7 @@ class Background {
 
       // register global shortcuts
       if (this.store.get('settings.enableGlobalShortcut') !== false) {
-        registerGlobalShortcut(this.window, this.store);
+        registerGlobalShortcut(this.windowFacade, this.store, this.audioFacade);
       }
 
       // try to start osdlyrics process on start
@@ -447,7 +617,7 @@ class Background {
 
       // create mpris
       if (isCreateMpris) {
-        createMpris(this.window);
+        createMpris(this.audioFacade);
       }
     });
 
@@ -455,11 +625,7 @@ class Background {
       // On macOS it's common to re-create a window in the app when the
       // dock icon is clicked and there are no other windows open.
       log('app activate event');
-      if (this.window === null) {
-        this.createWindow();
-      } else {
-        this.window.show();
-      }
+      this.restoreWindow();
     });
 
     app.on('window-all-closed', () => {
@@ -470,6 +636,8 @@ class Background {
 
     app.on('before-quit', () => {
       this.willQuitApp = true;
+      this.isQuitting = true;
+      this.audioWindow?.destroy();
     });
 
     app.on('quit', () => {
@@ -483,13 +651,7 @@ class Background {
 
     if (!isMac) {
       app.on('second-instance', (e, cl, wd) => {
-        if (this.window) {
-          this.window.show();
-          if (this.window.isMinimized()) {
-            this.window.restore();
-          }
-          this.window.focus();
-        }
+        this.restoreWindow();
       });
     }
   }

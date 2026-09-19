@@ -53,11 +53,10 @@ async function initTracksCacheBytes() {
   if (!process.env.IS_ELECTRON) return;
   try {
     await waitForSettingsReady();
-    const all = await db.trackSources.toArray();
-    tracksCacheBytes = all.reduce(
-      (sum, t) => sum + (t?.source?.byteLength || 0),
-      0
-    );
+    tracksCacheBytes = 0;
+    await db.trackSources.each(t => {
+      tracksCacheBytes += t?.source?.byteLength || 0;
+    });
     console.debug(
       '[debug][db.js] initTracksCacheBytes, total bytes:',
       tracksCacheBytes
