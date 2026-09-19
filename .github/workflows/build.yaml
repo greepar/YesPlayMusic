@@ -27,15 +27,21 @@ jobs:
           - name: mac-arm64
             os: macos-15
             args: -m --arm64
+            shell: bash
           - name: mac-x64
             os: macos-15-intel
             args: -m --x64
+            shell: bash
           - name: win
             os: windows-latest
             args: -w
+            # Git Bash 会把环境变量里形如 /api 的值改写成 C:/Program Files/Git/api，
+            # 导致打进包里的接口地址错误。Windows 构建用 PowerShell，不做路径改写
+            shell: pwsh
           - name: linux
             os: ubuntu-22.04
             args: -l
+            shell: bash
 
     steps:
       - name: Check out Git repository
@@ -91,11 +97,21 @@ jobs:
       - name: Build Electron app
         # 不在这里发布，由下面的 release job 统一上传，避免多个 job 同时写同一个 Release
         run: yarn electron:build ${{ matrix.args }}
-        shell: bash
+        shell: ${{ matrix.shell }}
         # macOS 使用 ad-hoc 签名（见 vue.config.js），避免 Gatekeeper 提示「已损坏」。
         # 注意：不要在这里写 `CSC_LINK: ${{ secrets.CSC_LINK }}`——Secret 未配置时它会变成
         # 空字符串，electron-builder 会把空字符串当作证书路径而报错。
         # 需要真实签名时，把证书配置成 Secret 并另建一个带 `if:` 判断的构建步骤。
+
+      - name: Verify bundled API base URL
+        # 防止环境变量被 shell 改写（如 Git Bash 的 /api -> C:/Program Files/Git/api）后仍然发布
+        run: |
+          if grep -rIl "Program Files/Git" dist_electron/bundled/js 2>/dev/null; then
+            echo "::error::bundled JS contains a rewritten path (Program Files/Git)"; exit 1
+          fi
+          grep -rIlE '"/api"|VUE_APP_ELECTRON_API_URL' dist_electron/bundled/js > /dev/null || { echo "::error::API base URL not found in bundle"; exit 1; }
+          echo "API base URL looks sane"
+        shell: bash
 
       - name: Verify macOS code signature
         if: runner.os == 'macOS'
