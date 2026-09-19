@@ -569,7 +569,7 @@ export default class {
       lyrics: lyricContent.lrc.lyric,
     });
 
-    ipcRenderer.on('saveLyricFinished', () => {
+    ipcRenderer.once('saveLyricFinished', () => {
       ipcRenderer?.send('metadata', metadata);
     });
   }

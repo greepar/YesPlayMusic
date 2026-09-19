@@ -1,5 +1,9 @@
 import Vue from 'vue';
-import type { PlayerCommandResult, PlayerSnapshot } from './protocol';
+import type {
+  PlayerCommandResult,
+  PlayerProgress,
+  PlayerSnapshot,
+} from './protocol';
 
 const METHODS = [
   'play',
@@ -73,6 +77,13 @@ export default class RemotePlayer {
     this.ipc.on('player:snapshot', (_: unknown, snapshot: PlayerSnapshot) =>
       this.applySnapshot(snapshot)
     );
+    this.ipc.on('player:progress', (_: unknown, progress: PlayerProgress) => {
+      if (!progress || progress.sessionId !== this.sessionId) return;
+      this.progressBase = Number(progress.progress) || 0;
+      this.progressAt = progress.emittedAt || Date.now();
+      this.state.progress = this.progressBase;
+      this.state.playing = !!progress.playing;
+    });
     this.ipc.on('player:host-ready', (_: unknown, sessionId: string) => {
       this.sessionId = sessionId;
       this.ipc.send('player:subscribe');

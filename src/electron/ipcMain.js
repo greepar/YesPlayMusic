@@ -75,6 +75,9 @@ const exitAskWithoutMac = (e, win) => {
 };
 
 const client = require('discord-rich-presence')('818936529484906596');
+client.on('error', error => {
+  log(`Discord Rich Presence unavailable: ${error.message}`);
+});
 
 export function initIpcMain(
   win,
@@ -117,6 +120,20 @@ export function initIpcMain(
       return;
     latestPlayerSnapshot = snapshot;
     win?.webContents.send('player:snapshot', snapshot);
+    trayEventEmitter?.emit('updatePlayState', snapshot.playing);
+    trayEventEmitter?.emit('updateLikeState', snapshot.isCurrentTrackLiked);
+  });
+  ipcMain.on('player:progress', (event, progress) => {
+    if (
+      !isAudioSender(event) ||
+      !progress ||
+      progress.sessionId !== latestPlayerSnapshot?.sessionId
+    )
+      return;
+    latestPlayerSnapshot.progress = progress.progress;
+    latestPlayerSnapshot.emittedAt = progress.emittedAt;
+    latestPlayerSnapshot.playing = progress.playing;
+    win?.webContents.send('player:progress', progress);
   });
   ipcMain.on('player:result', (event, result) => {
     if (!isAudioSender(event) || !result?.requestId) return;
@@ -252,7 +269,7 @@ export function initIpcMain(
     );
   });
 
-  ipcMain.on('removeProxy', (event, arg) => {
+  ipcMain.on('removeProxy', () => {
     log('removeProxy');
     win.webContents.session.setProxy({});
     store.set('proxy', '');
@@ -274,7 +291,7 @@ export function initIpcMain(
     newShortcut[type] = shortcut;
     store.set('settings.shortcuts', shortcuts);
 
-    createMenu(win, store);
+    createMenu(win, store, audioWindow);
     globalShortcut.unregisterAll();
     registerGlobalShortcut(win, store, audioWindow);
   });
@@ -283,7 +300,7 @@ export function initIpcMain(
     log('restoreDefaultShortcuts');
     store.set('settings.shortcuts', cloneDeep(shortcuts));
 
-    createMenu(win, store);
+    createMenu(win, store, audioWindow);
     globalShortcut.unregisterAll();
     registerGlobalShortcut(win, store, audioWindow);
   });

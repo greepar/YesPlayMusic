@@ -86,6 +86,8 @@ export default {
   data() {
     return {
       show: false,
+      loading: false,
+      loaded: false,
       recommendPlaylist: { items: [] },
       newReleasesAlbum: { items: [] },
       topList: {
@@ -110,47 +112,68 @@ export default {
   },
   methods: {
     loadData() {
+      if (this.loading || this.loaded) return;
+      this.loading = true;
       setTimeout(() => {
-        if (!this.show) NProgress.start();
+        if (this.loading && !this.show) NProgress.start();
       }, 1000);
-      getRecommendPlayList(10, false).then(items => {
-        this.recommendPlaylist.items = items;
-        NProgress.done();
-        this.show = true;
-      });
-      newAlbums({
-        area: this.settings.musicLanguage ?? 'ALL',
-        limit: 10,
-      }).then(data => {
-        this.newReleasesAlbum.items = data.albums;
-      });
+      getRecommendPlayList(10, false)
+        .then(items => {
+          this.recommendPlaylist.items = items;
+          this.loaded = true;
+          this.show = true;
+        })
+        .catch(() => {
+          // Keep the rest of the home page usable when recommendations fail.
+          this.show = true;
+        })
+        .finally(() => {
+          this.loaded = true;
+          this.loading = false;
+          NProgress.done();
+        });
 
-      const toplistOfArtistsAreaTable = {
-        all: null,
-        zh: 1,
-        ea: 2,
-        jp: 4,
-        kr: 3,
+      const loadSecondarySections = () => {
+        newAlbums({
+          area: this.settings.musicLanguage ?? 'ALL',
+          limit: 10,
+        }).then(data => {
+          this.newReleasesAlbum.items = data.albums;
+        });
+
+        const toplistOfArtistsAreaTable = {
+          all: null,
+          zh: 1,
+          ea: 2,
+          jp: 4,
+          kr: 3,
+        };
+        toplistOfArtists(
+          toplistOfArtistsAreaTable[this.settings.musicLanguage ?? 'all']
+        ).then(data => {
+          let indexs = [];
+          while (indexs.length < 6) {
+            let tmp = ~~(Math.random() * 100);
+            if (!indexs.includes(tmp)) indexs.push(tmp);
+          }
+          this.recommendArtists.indexs = indexs;
+          this.recommendArtists.items = data.list.artists.filter((l, index) =>
+            indexs.includes(index)
+          );
+        });
+        toplists().then(data => {
+          this.topList.items = data.list.filter(l =>
+            this.topList.ids.includes(l.id)
+          );
+        });
+        this.$refs.DailyTracksCard?.loadDailyTracks();
       };
-      toplistOfArtists(
-        toplistOfArtistsAreaTable[this.settings.musicLanguage ?? 'all']
-      ).then(data => {
-        let indexs = [];
-        while (indexs.length < 6) {
-          let tmp = ~~(Math.random() * 100);
-          if (!indexs.includes(tmp)) indexs.push(tmp);
-        }
-        this.recommendArtists.indexs = indexs;
-        this.recommendArtists.items = data.list.artists.filter((l, index) =>
-          indexs.includes(index)
-        );
-      });
-      toplists().then(data => {
-        this.topList.items = data.list.filter(l =>
-          this.topList.ids.includes(l.id)
-        );
-      });
-      this.$refs.DailyTracksCard.loadDailyTracks();
+
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(loadSecondarySections, { timeout: 1500 });
+      } else {
+        setTimeout(loadSecondarySections, 0);
+      }
     },
   },
 };

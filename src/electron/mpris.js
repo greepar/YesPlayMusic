@@ -3,24 +3,24 @@ import { ipcMain, app } from 'electron';
 
 export function createMpris(window) {
   const Player = require('mpris-service');
-  const renderer = window.webContents;
+  const send = (channel, ...args) => window.webContents.send(channel, ...args);
 
   const player = Player({
     name: 'yesplaymusic',
     identity: 'YesPlayMusic',
   });
 
-  player.on('next', () => renderer.send('next'));
-  player.on('previous', () => renderer.send('previous'));
-  player.on('playpause', () => renderer.send('play'));
-  player.on('play', () => renderer.send('play'));
-  player.on('pause', () => renderer.send('play'));
+  player.on('next', () => send('next'));
+  player.on('previous', () => send('previous'));
+  player.on('playpause', () => send('play'));
+  player.on('play', () => send('play'));
+  player.on('pause', () => send('play'));
   player.on('quit', () => app.exit());
   player.on('position', args =>
-    renderer.send('setPosition', args.position / 1000 / 1000)
+    send('setPosition', args.position / 1000 / 1000)
   );
-  player.on('loopStatus', () => renderer.send('repeat'));
-  player.on('shuffle', () => renderer.send('shuffle'));
+  player.on('loopStatus', () => send('repeat'));
+  player.on('shuffle', () => send('shuffle'));
 
   ipcMain.on('player', (e, { playing }) => {
     player.playbackStatus = playing
@@ -44,11 +44,19 @@ export function createMpris(window) {
 
   ipcMain.on('playerCurrentTrackTime', (e, position) => {
     player.getPosition = () => position * 1000 * 1000;
-    try { player.seeked(position * 1000 * 1000); } catch {}
+    try {
+      player.seeked(position * 1000 * 1000);
+    } catch (error) {
+      console.debug('[mpris] failed to emit seeked', error);
+    }
   });
 
   ipcMain.on('seeked', (e, position) => {
-    try { player.seeked(position * 1000 * 1000); } catch {}
+    try {
+      player.seeked(position * 1000 * 1000);
+    } catch (error) {
+      console.debug('[mpris] failed to emit seeked', error);
+    }
   });
 
   ipcMain.on('switchRepeatMode', (e, mode) => {

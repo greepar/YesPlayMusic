@@ -68,6 +68,13 @@ export interface PlayerSnapshot {
   sourceKind?: string;
 }
 
+export interface PlayerProgress {
+  sessionId: string;
+  emittedAt: number;
+  progress: number;
+  playing: boolean;
+}
+
 export const isPlayerCommand = (value: any): value is PlayerCommand =>
   value &&
   typeof value.requestId === 'string' &&

@@ -130,6 +130,9 @@ export default {
 }
 
 .item {
+  content-visibility: auto;
+  contain: layout paint style;
+  contain-intrinsic-size: auto 280px;
   color: var(--color-text);
   .text {
     margin-top: 8px;

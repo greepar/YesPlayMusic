@@ -5,7 +5,7 @@ const { app, Menu } = require('electron');
 
 const isMac = process.platform === 'darwin';
 
-export function createMenu(win, store) {
+export function createMenu(win, store, playerWindow = win) {
   let shortcuts = store.get('settings.shortcuts');
   if (shortcuts === undefined) {
     shortcuts = defaultShortcuts;
@@ -77,56 +77,56 @@ export function createMenu(win, store) {
           label: 'Play',
           accelerator: shortcuts.find(s => s.id === 'play').shortcut,
           click: () => {
-            win.webContents.send('play');
+            playerWindow.webContents.send('play');
           },
         },
         {
           label: 'Next',
           accelerator: shortcuts.find(s => s.id === 'next').shortcut,
           click: () => {
-            win.webContents.send('next');
+            playerWindow.webContents.send('next');
           },
         },
         {
           label: 'Previous',
           accelerator: shortcuts.find(s => s.id === 'previous').shortcut,
           click: () => {
-            win.webContents.send('previous');
+            playerWindow.webContents.send('previous');
           },
         },
         {
           label: 'Increase Volume',
           accelerator: shortcuts.find(s => s.id === 'increaseVolume').shortcut,
           click: () => {
-            win.webContents.send('increaseVolume');
+            playerWindow.webContents.send('increaseVolume');
           },
         },
         {
           label: 'Decrease Volume',
           accelerator: shortcuts.find(s => s.id === 'decreaseVolume').shortcut,
           click: () => {
-            win.webContents.send('decreaseVolume');
+            playerWindow.webContents.send('decreaseVolume');
           },
         },
         {
           label: 'Like',
           accelerator: shortcuts.find(s => s.id === 'like').shortcut,
           click: () => {
-            win.webContents.send('like');
+            playerWindow.webContents.send('like');
           },
         },
         {
           label: 'Repeat',
           accelerator: 'Alt+R',
           click: () => {
-            win.webContents.send('repeat');
+            playerWindow.webContents.send('repeat');
           },
         },
         {
           label: 'Shuffle',
           accelerator: 'Alt+S',
           click: () => {
-            win.webContents.send('shuffle');
+            playerWindow.webContents.send('shuffle');
           },
         },
       ],
@@ -173,7 +173,7 @@ export function createMenu(win, store) {
           label: 'GitHub',
           click: async () => {
             const { shell } = require('electron');
-            await shell.openExternal('https://github.com/qier222/YesPlayMusic');
+            await shell.openExternal('https://github.com/greepar/YesPlayMusic');
           },
         },
         {

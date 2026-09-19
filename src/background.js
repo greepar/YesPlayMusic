@@ -8,6 +8,7 @@ import {
   globalShortcut,
   nativeTheme,
   screen,
+  powerMonitor,
 } from 'electron';
 import {
   isWindows,
@@ -154,7 +155,7 @@ class Background {
     });
     this.neteaseMusicAPI = null;
     this.expressApp = null;
-    this.willQuitApp = !isMac;
+    this.willQuitApp = false;
 
     this.init();
   }
@@ -178,6 +179,10 @@ class Background {
     // Playback is initiated through IPC, so the hidden audio renderer never
     // receives a direct pointer gesture of its own.
     app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+    // 界面和隐藏的音频页面同源（都是 localhost:27232），合并到同一个渲染进程里，
+    // 省下一个独立的渲染进程（实测冷启动约 -190MB，进程数与没有音频后台时一致）。
+    // 代价：这个渲染进程崩溃时界面和音频会一起停止（音频页面会被自动重建一次）。
+    app.commandLine.appendSwitch('process-per-site');
 
     // handle app events
     this.handleAppEvents();
@@ -339,6 +344,10 @@ class Background {
   scheduleUiRelease() {
     this.cancelUiRelease();
     if (this.store.get('settings.disableUiAutoRelease') === true) return;
+    const explicitlyEnabled =
+      this.store.get('settings.enableUiAutoReleaseOnUntestedPlatforms') ===
+      true;
+    if ((!isMac || process.arch !== 'arm64') && !explicitlyEnabled) return;
     this.uiReleaseTimer = setTimeout(() => this.releaseUiWindow(), 30000);
   }
 
@@ -379,16 +388,21 @@ class Background {
   createAudioWindow() {
     if (this.audioWindow && !this.audioWindow.isDestroyed()) return;
     this.audioWindow = new BrowserWindow({
-      width: 320,
-      height: 180,
+      width: 1,
+      height: 1,
       show: false,
       skipTaskbar: true,
+      paintWhenInitiallyHidden: false,
       webPreferences: {
         webSecurity: false,
         nodeIntegration: true,
         enableRemoteModule: false,
         contextIsolation: false,
         backgroundThrottling: false,
+        images: false,
+        spellcheck: false,
+        enableWebSQL: false,
+        navigateOnDragDrop: false,
       },
     });
     const audioUrl = process.env.WEBPACK_DEV_SERVER_URL
@@ -402,7 +416,10 @@ class Background {
       'render-process-gone',
       (_event, details) => {
         log(`audio renderer exited: ${details.reason}`);
+        const crashedWindow = this.audioWindow;
         this.audioWindow = null;
+        crashedWindow?.removeAllListeners('close');
+        crashedWindow?.destroy();
         if (!this.isQuitting && !this.audioRestarted) {
           this.audioRestarted = true;
           this.createAudioWindow();
@@ -434,7 +451,7 @@ class Background {
         .then(result => {
           if (result.response === 0) {
             shell.openExternal(
-              'https://github.com/qier222/YesPlayMusic/releases'
+              'https://github.com/greepar/YesPlayMusic/releases'
             );
           }
         });
@@ -547,7 +564,8 @@ class Background {
         this.ypmTrayImpl = createTray(
           this.windowFacade,
           this.trayEventEmitter,
-          this.store
+          this.store,
+          this.audioFacade
         );
       }
 
@@ -585,7 +603,7 @@ class Background {
       this.checkForUpdates();
 
       // create menu
-      createMenu(this.windowFacade, this.store);
+      createMenu(this.windowFacade, this.store, this.audioFacade);
 
       // create dock menu for macOS
       const createdDockMenu = createDockMenu(this.windowFacade);
@@ -602,23 +620,34 @@ class Background {
 
       // try to start osdlyrics process on start
       if (this.store.get('settings.enableOsdlyricsSupport')) {
-        await createDbus(this.window);
-        log('try to start osdlyrics process');
-        const osdlyricsProcess = spawn('osdlyrics');
+        try {
+          await createDbus(this.audioFacade);
+          log('try to start osdlyrics process');
+          const osdlyricsProcess = spawn('osdlyrics');
 
-        osdlyricsProcess.on('error', err => {
-          log(`failed to start osdlyrics: ${err.message}`);
-        });
+          osdlyricsProcess.on('error', err => {
+            log(`failed to start osdlyrics: ${err.message}`);
+          });
 
-        osdlyricsProcess.on('exit', (code, signal) => {
-          log(`osdlyrics process exited with code ${code}, signal ${signal}`);
-        });
+          osdlyricsProcess.on('exit', (code, signal) => {
+            log(`osdlyrics process exited with code ${code}, signal ${signal}`);
+          });
+        } catch (error) {
+          log(`failed to initialize desktop lyrics: ${error.message}`);
+        }
       }
 
       // create mpris
       if (isCreateMpris) {
         createMpris(this.audioFacade);
       }
+
+      powerMonitor.on('suspend', () => {
+        this.audioFacade.webContents.send('player:request-snapshot');
+      });
+      powerMonitor.on('resume', () => {
+        this.audioFacade.webContents.send('system-resume');
+      });
     });
 
     app.on('activate', () => {
@@ -650,7 +679,7 @@ class Background {
     });
 
     if (!isMac) {
-      app.on('second-instance', (e, cl, wd) => {
+      app.on('second-instance', () => {
         this.restoreWindow();
       });
     }

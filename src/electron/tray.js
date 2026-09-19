@@ -3,7 +3,7 @@ import path from 'path';
 import { app, nativeImage, Tray, Menu, nativeTheme } from 'electron';
 import { isLinux } from '@/utils/platform';
 
-function createMenuTemplate(win) {
+function createMenuTemplate(win, playerWindow = win) {
   return [
     {
       label: '播放',
@@ -11,7 +11,7 @@ function createMenuTemplate(win) {
         path.join(__static, 'img/icons/play.png')
       ),
       click: () => {
-        win.webContents.send('play');
+        playerWindow.webContents.send('play');
       },
       id: 'play',
     },
@@ -21,7 +21,7 @@ function createMenuTemplate(win) {
         path.join(__static, 'img/icons/pause.png')
       ),
       click: () => {
-        win.webContents.send('play');
+        playerWindow.webContents.send('play');
       },
       id: 'pause',
       visible: false,
@@ -33,7 +33,7 @@ function createMenuTemplate(win) {
       ),
       accelerator: 'CmdOrCtrl+Left',
       click: () => {
-        win.webContents.send('previous');
+        playerWindow.webContents.send('previous');
       },
     },
     {
@@ -43,7 +43,7 @@ function createMenuTemplate(win) {
       ),
       accelerator: 'CmdOrCtrl+Right',
       click: () => {
-        win.webContents.send('next');
+        playerWindow.webContents.send('next');
       },
     },
     {
@@ -53,7 +53,7 @@ function createMenuTemplate(win) {
       ),
       accelerator: 'Alt+R',
       click: () => {
-        win.webContents.send('repeat');
+        playerWindow.webContents.send('repeat');
       },
     },
     {
@@ -63,7 +63,7 @@ function createMenuTemplate(win) {
       ),
       accelerator: 'CmdOrCtrl+L',
       click: () => {
-        win.webContents.send('like');
+        playerWindow.webContents.send('like');
       },
       id: 'like',
     },
@@ -74,7 +74,7 @@ function createMenuTemplate(win) {
       ),
       accelerator: 'CmdOrCtrl+L',
       click: () => {
-        win.webContents.send('like');
+        playerWindow.webContents.send('like');
       },
       id: 'unlike',
       visible: false,
@@ -102,11 +102,12 @@ function createMenuTemplate(win) {
 // 添加左键支持
 // 2022.05.17
 class YPMTrayLinuxImpl {
-  constructor(tray, win, emitter, store) {
+  constructor(tray, win, emitter, store, playerWindow) {
     this.tray = tray;
     this.win = win;
     this.emitter = emitter;
     this.store = store;
+    this.playerWindow = playerWindow;
     this.template = undefined;
     this.initTemplate();
     this.contextMenu = Menu.buildFromTemplate(this.template);
@@ -128,7 +129,7 @@ class YPMTrayLinuxImpl {
       {
         type: 'separator',
       },
-    ].concat(createMenuTemplate(this.win));
+    ].concat(createMenuTemplate(this.win, this.playerWindow));
   }
 
   handleEvents() {
@@ -173,12 +174,12 @@ class YPMTrayLinuxImpl {
 }
 
 class YPMTrayWindowsImpl {
-  constructor(tray, win, emitter, store) {
+  constructor(tray, win, emitter, store, playerWindow) {
     this.tray = tray;
     this.win = win;
     this.emitter = emitter;
     this.store = store;
-    this.template = createMenuTemplate(win);
+    this.template = createMenuTemplate(win, playerWindow);
     this.contextMenu = Menu.buildFromTemplate(this.template);
 
     this.isPlaying = false;
@@ -242,7 +243,7 @@ class YPMTrayWindowsImpl {
   }
 }
 
-export function createTray(win, eventEmitter, store) {
+export function createTray(win, eventEmitter, store, playerWindow = win) {
   let trayIconSetting = store.get('settings.trayIconTheme') || 'auto';
   let iconTheme;
   if (trayIconSetting === 'auto') {
@@ -262,6 +263,6 @@ export function createTray(win, eventEmitter, store) {
   tray.setToolTip('YesPlayMusic');
 
   return isLinux
-    ? new YPMTrayLinuxImpl(tray, win, eventEmitter, store)
-    : new YPMTrayWindowsImpl(tray, win, eventEmitter, store);
+    ? new YPMTrayLinuxImpl(tray, win, eventEmitter, store, playerWindow)
+    : new YPMTrayWindowsImpl(tray, win, eventEmitter, store, playerWindow);
 }

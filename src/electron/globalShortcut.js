@@ -46,7 +46,7 @@ export function registerGlobalShortcut(win, store, playerWindow = win) {
   globalShortcut.register(
     shortcuts.find(s => s.id === 'like').globalShortcut,
     () => {
-      win.webContents.send('like');
+      playerWindow.webContents.send('like');
     }
   );
   globalShortcut.register(

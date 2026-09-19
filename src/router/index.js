@@ -1,8 +1,11 @@
 import Vue from 'vue';
 import VueRouter from 'vue-router';
 import { isLooseLoggedIn, isAccountLoggedIn } from '@/utils/auth';
+import NProgress from 'nprogress';
 
 Vue.use(VueRouter);
+const loadExplore = () => import('@/views/explore.vue');
+export const preloadExplore = loadExplore;
 const routes = [
   {
     path: '/',
@@ -90,7 +93,7 @@ const routes = [
   {
     path: '/explore',
     name: 'explore',
-    component: () => import('@/views/explore.vue'),
+    component: loadExplore,
     meta: {
       keepAlive: true,
       savePosition: true,
@@ -140,27 +143,30 @@ VueRouter.prototype.push = function push(location) {
 };
 
 router.beforeEach((to, from, next) => {
+  NProgress.start();
   // 需要登录的逻辑
   if (to.meta.requireAccountLogin) {
     if (isAccountLoggedIn()) {
-      next();
+      return next();
     } else {
-      next({ path: '/login/account' });
+      return next({ path: '/login/account' });
     }
   }
   if (to.meta.requireLogin) {
     if (isLooseLoggedIn()) {
-      next();
+      return next();
     } else {
       if (process.env.IS_ELECTRON === true) {
-        next({ path: '/login/account' });
+        return next({ path: '/login/account' });
       } else {
-        next({ path: '/login' });
+        return next({ path: '/login' });
       }
     }
-  } else {
-    next();
   }
+  return next();
 });
+
+router.afterEach(() => NProgress.done());
+router.onError(() => NProgress.done());
 
 export default router;

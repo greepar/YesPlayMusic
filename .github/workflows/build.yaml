@@ -19,12 +19,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: mac-arm64
+          - name: mac
             os: macos-15
-            args: -m --arm64
-          - name: mac-x64
-            os: macos-15-intel
-            args: -m --x64
+            args: -m --x64 --arm64
           - name: win
             os: windows-latest
             args: -w
@@ -99,6 +96,8 @@ jobs:
             dist_electron/*.dmg
             dist_electron/*.exe
             dist_electron/*.AppImage
+            dist_electron/latest*.yml
+            dist_electron/*.blockmap
           if-no-files-found: error
 
   release:

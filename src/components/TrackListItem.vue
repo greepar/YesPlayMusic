@@ -418,7 +418,7 @@ button {
 
 .track.disable {
   img {
-    filter: grayscale(1) opacity(0.6);
+    opacity: 0.38;
   }
   .title,
   .artist,

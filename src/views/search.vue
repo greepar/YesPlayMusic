@@ -137,10 +137,6 @@ export default {
   },
   methods: {
     ...mapActions(['showToast']),
-    playTrackInSearchResult(id) {
-      let track = this.tracks.find(t => t.id === id);
-      this.$store.state.player.appendTrackToPlayerList(track, true);
-    },
     search(type = 'all') {
       let showToast = this.showToast;
       const typeTable = {

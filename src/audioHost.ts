@@ -5,13 +5,13 @@ const ipc = window.require('electron').ipcRenderer;
 const player: any = store.state.player;
 const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let version = 0;
-let lastSerialized = '';
+let lastStateSignature = '';
 
 function snapshot(): PlayerSnapshot {
   const source = player._howler?._src || '';
   return {
     sessionId,
-    version: ++version,
+    version,
     emittedAt: Date.now(),
     playing: player.playing,
     progress: Number(player.seek(null, false) || 0),
@@ -36,18 +36,44 @@ function snapshot(): PlayerSnapshot {
   };
 }
 
-function publish(force = false) {
+function stateSignature() {
+  return JSON.stringify([
+    player.currentTrackID,
+    player.playing,
+    !!player._loading,
+    player.enabled,
+    player.repeatMode,
+    player.shuffle,
+    player.reversed,
+    player.volume,
+    player.current,
+    player.list.length,
+    player.playNextList.length,
+    player.isPersonalFM,
+    player.personalFMTrack?.id,
+    player.isCurrentTrackLiked,
+  ]);
+}
+
+function publish() {
+  lastStateSignature = stateSignature();
   const next = snapshot();
-  const serialized = JSON.stringify({
-    ...next,
-    version: 0,
-    emittedAt: 0,
-    progress: next.playing ? 0 : next.progress,
-  });
-  if (force || serialized !== lastSerialized || next.playing) {
-    lastSerialized = serialized;
-    ipc.send('player:snapshot', next);
+  next.version = ++version;
+  ipc.send('player:snapshot', next);
+}
+
+function tick() {
+  if (stateSignature() !== lastStateSignature) {
+    publish();
+    return;
   }
+  if (!player.playing) return;
+  ipc.send('player:progress', {
+    sessionId,
+    emittedAt: Date.now(),
+    progress: Number(player.seek(null, false) || 0),
+    playing: true,
+  });
 }
 
 ipc.on('player:command', async (_: unknown, command: PlayerCommand) => {
@@ -59,7 +85,7 @@ ipc.on('player:command', async (_: unknown, command: PlayerCommand) => {
     } else {
       value = await player[command.name](...command.args);
     }
-    publish(true);
+    publish();
     ipc.send('player:result', {
       requestId: command.requestId,
       sessionId,
@@ -77,7 +103,7 @@ ipc.on('player:command', async (_: unknown, command: PlayerCommand) => {
     });
   }
 });
-ipc.on('player:request-snapshot', () => publish(true));
+ipc.on('player:request-snapshot', () => publish());
 ipc.on('play', () => player.playOrPause());
 ipc.on('next', () =>
   player.isPersonalFM ? player.playNextFMTrack() : player.playNextTrack()
@@ -91,6 +117,16 @@ ipc.on('decreaseVolume', () => {
 });
 ipc.on('repeat', () => player.switchRepeatMode());
 ipc.on('shuffle', () => player.switchShuffle());
+ipc.on('like', async () => {
+  await store.dispatch('likeATrack', player.currentTrack.id);
+  publish();
+});
+ipc.on('system-resume', () => {
+  if (player.playing && player._howler && !player._howler.playing()) {
+    player.play();
+  }
+  publish();
+});
 ipc.on('settings-sync', (_: unknown, settings: any) => {
   store.state.settings = settings;
   player.setOutputDevice();
@@ -103,12 +139,13 @@ ipc.on('player:restore', (_: unknown, previous: PlayerSnapshot) => {
       clearInterval(restore);
       player.seek(previous.progress || 0, false);
       if (previous.playing) player.play();
-      publish(true);
+      publish();
     } else if (attempts >= 20) {
       clearInterval(restore);
     }
   }, 250);
 });
 ipc.send('player:host-ready', sessionId);
-publish(true);
-setInterval(() => publish(), 250);
+publish();
+Promise.resolve(store.dispatch('fetchLikedSongs')).then(() => publish());
+setInterval(tick, 250);

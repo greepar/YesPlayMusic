@@ -143,16 +143,6 @@ a {
   }
 }
 
-// 图片加载完成后的淡入。只写 from：动画结束后回到各组件自己设定的透明度，不会覆盖它们
-@keyframes virtual-image-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-img[data-virtual-image][data-loaded] {
-  animation: virtual-image-fade-in 0.32s ease-out;
-}
-
 // 页面切换：新页面淡入。
 // 淡入只改变透明度，没有位移和缩放，不属于会引起不适的动效，所以不受系统「减少动态效果」
 // 影响（Windows 关闭动画效果、远程桌面、虚拟机都会被 Chromium 当成 reduce，导致动画消失）。

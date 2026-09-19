@@ -1,4 +1,3 @@
-
 <br />
 <p align="center">
   <a href="https://music.qier222.com" target="blank">
@@ -11,18 +10,17 @@
   </p>
 </p>
 
-
 ## 📦️ 安装
 
 访问本项目的 [Releases](https://github.com/greepar/YesPlayMusic/releases)
 页面下载安装包，目前提供以下平台：
 
-| 平台    | 架构                | 安装包                                                            |
-| ------- | ------------------- | ----------------------------------------------------------------- |
-| macOS   | Apple 芯片（arm64） | `YesPlayMusic-mac-<版本>-arm64.dmg`                               |
-| macOS   | Intel（x64）        | `YesPlayMusic-mac-<版本>-x64.dmg`                                 |
+| 平台    | 架构                | 安装包                                                                   |
+| ------- | ------------------- | ------------------------------------------------------------------------ |
+| macOS   | Apple 芯片（arm64） | `YesPlayMusic-mac-<版本>-arm64.dmg`                                      |
+| macOS   | Intel（x64）        | `YesPlayMusic-mac-<版本>-x64.dmg`                                        |
 | Windows | x64                 | 安装版 `YesPlayMusic Setup <版本>.exe`、便携版 `YesPlayMusic <版本>.exe` |
-| Linux   | x64 / arm64         | `YesPlayMusic-<版本>.AppImage`                                    |
+| Linux   | x64 / arm64         | `YesPlayMusic-<版本>.AppImage`                                           |
 
 > macOS 安装包使用 ad-hoc 签名（未经 Apple 公证）。首次打开如果被系统拦截，请在
 > 「系统设置 → 隐私与安全性」中点击「仍要打开」，或在终端执行
@@ -41,12 +39,12 @@
 
 4. 选择下列表格的命令来打包适合你的安装包，打包出来的文件在 `/dist_electron` 目录下。了解更多信息可访问 [electron-builder 文档](https://www.electron.build/cli)
 
-| 命令                                | 说明                              |
-| ----------------------------------- | --------------------------------- |
-| `yarn electron:build --mac --arm64` | macOS Apple 芯片（在 macOS 上）   |
-| `yarn electron:build --mac --x64`   | macOS Intel（在 macOS 上）        |
-| `yarn electron:build --win`         | Windows x64                       |
-| `yarn electron:build --linux`       | Linux AppImage（x64 和 arm64）    |
+| 命令                                | 说明                            |
+| ----------------------------------- | ------------------------------- |
+| `yarn electron:build --mac --arm64` | macOS Apple 芯片（在 macOS 上） |
+| `yarn electron:build --mac --x64`   | macOS Intel（在 macOS 上）      |
+| `yarn electron:build --win`         | Windows x64                     |
+| `yarn electron:build --linux`       | Linux AppImage（x64 和 arm64）  |
 
 ## :computer: 配置开发环境
 
@@ -74,7 +72,7 @@ yarn netease_api:run
 
 ## ☑️ Todo
 
-查看 Todo 请访问本项目的 [Projects](https://github.com/qier222/YesPlayMusic/projects/1)
+查看 Todo 请访问本项目的 [Projects](https://github.com/greepar/YesPlayMusic/projects)
 
 欢迎提 Issue 和 Pull request。
 

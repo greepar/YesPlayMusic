@@ -18,6 +18,8 @@
         <router-link
           to="/explore"
           :class="{ active: $route.name === 'explore' }"
+          @pointerenter.native="prepareExplore"
+          @pointerdown.native="prepareExplore"
           >{{ $t('nav.explore') }}</router-link
         >
         <router-link
@@ -77,6 +79,7 @@
 <script>
 import { mapState } from 'vuex';
 import { isLooseLoggedIn, doLogout } from '@/utils/auth';
+import { preloadExplore } from '@/router';
 
 // import icons for win32 title bar
 // icons by https://github.com/microsoft/vscode-codicons
@@ -129,6 +132,9 @@ export default {
     }
   },
   methods: {
+    prepareExplore() {
+      preloadExplore().catch(() => {});
+    },
     go(where) {
       if (where === 'back') this.$router.go(-1);
       else this.$router.go(1);
@@ -158,7 +164,7 @@ export default {
       this.$router.push({ name: 'settings' });
     },
     toGitHub() {
-      window.open('https://github.com/qier222/YesPlayMusic');
+      window.open('https://github.com/greepar/YesPlayMusic');
     },
     toLogin() {
       if (process.env.IS_ELECTRON === true) {

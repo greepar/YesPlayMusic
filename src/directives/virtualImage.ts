@@ -33,14 +33,33 @@ function handleLoad(this: HTMLImageElement): void {
   if (this.getAttribute('src') !== EMPTY_IMAGE) this.dataset.loaded = '';
 }
 
+const pendingImages = new Set<HTMLImageElement>();
+let pendingFrame = 0;
+
+function commitImages(): void {
+  pendingFrame = 0;
+  pendingImages.forEach(image => {
+    pendingImages.delete(image);
+    const state = states.get(image);
+    if (!state) return;
+    const next =
+      state.visible && state.source && !isRenderingSuspended()
+        ? state.source
+        : EMPTY_IMAGE;
+    if (image.getAttribute('src') === next) return;
+    if (next === EMPTY_IMAGE) delete image.dataset.loaded;
+    image.src = next;
+  });
+}
+
 function renderImage(image: HTMLImageElement, state: VirtualImageState): void {
   const next =
     state.visible && state.source && !isRenderingSuspended()
       ? state.source
       : EMPTY_IMAGE;
   if (image.getAttribute('src') === next) return;
-  if (next === EMPTY_IMAGE) delete image.dataset.loaded;
-  image.src = next;
+  pendingImages.add(image);
+  if (!pendingFrame) pendingFrame = requestAnimationFrame(commitImages);
 }
 
 onRenderingStateChange(() => {
@@ -63,7 +82,10 @@ const observer =
             renderImage(image, state);
           });
         },
-        { rootMargin: '400px 0px', threshold: 0 }
+        // Start the network/decode work before the row enters the viewport.
+        // The element-level containment rules keep those completions from
+        // repainting the rest of a long page.
+        { rootMargin: '1200px 0px', threshold: 0 }
       );
 
 function updateImage(image: HTMLImageElement, source: string): void {
@@ -76,14 +98,22 @@ function updateImage(image: HTMLImageElement, source: string): void {
 Vue.directive('virtual-image', {
   bind(image: HTMLImageElement, binding: VNodeDirective) {
     image.decoding = 'async';
-    image.loading = 'lazy';
+    // IntersectionObserver owns lazy loading. Native lazy loading would add a
+    // second, browser-dependent threshold and defeat the explicit preload band.
+    image.loading = 'eager';
     image.dataset.virtualImage = '';
     image.addEventListener('load', handleLoad);
     const source = resolveSource(binding.value, binding.arg);
-    states.set(image, { source, visible: observer === null });
+    states.set(image, {
+      source,
+      visible: observer === null,
+    });
     images.add(image);
     image.src = observer === null && source ? source : EMPTY_IMAGE;
     observer?.observe(image);
+  },
+  inserted(image: HTMLImageElement) {
+    image.loading = 'eager';
   },
   update(image: HTMLImageElement, binding: VNodeDirective) {
     if (binding.value !== binding.oldValue || binding.arg !== binding.oldArg) {
@@ -93,6 +123,7 @@ Vue.directive('virtual-image', {
   unbind(image: HTMLImageElement) {
     image.removeEventListener('load', handleLoad);
     observer?.unobserve(image);
+    pendingImages.delete(image);
     images.delete(image);
     states.delete(image);
     image.src = EMPTY_IMAGE;
