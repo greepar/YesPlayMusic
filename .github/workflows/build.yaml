@@ -98,11 +98,10 @@ jobs:
         # 不在这里发布，由下面的 release job 统一上传，避免多个 job 同时写同一个 Release
         run: yarn electron:build ${{ matrix.args }}
         shell: bash
-        env:
-          # 如需真实签名 + 公证，在仓库 Secrets 里配置 CSC_LINK / CSC_KEY_PASSWORD 即可；
-          # 未配置时 macOS 使用 ad-hoc 签名（见 vue.config.js），避免 Gatekeeper 提示「已损坏」
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        # macOS 使用 ad-hoc 签名（见 vue.config.js），避免 Gatekeeper 提示「已损坏」。
+        # 注意：不要在这里写 `CSC_LINK: ${{ secrets.CSC_LINK }}`——Secret 未配置时它会变成
+        # 空字符串，electron-builder 会把空字符串当作证书路径而报错。
+        # 需要真实签名时，把证书配置成 Secret 并另建一个带 `if:` 判断的构建步骤。
 
       - name: Verify macOS code signature
         if: runner.os == 'macOS'

@@ -163,7 +163,8 @@ module.exports = {
             },
             {
               target: 'deb',
-              arch: ['x64', 'armv7l', 'arm64'],
+              // Electron 44 没有 linux-armv7l 的官方构建
+              arch: ['x64', 'arm64'],
             },
             {
               target: 'rpm',
