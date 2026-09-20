@@ -13,19 +13,19 @@
   >
     <div class="vue-slider-rail">
       <div class="vue-slider-process" :style="processStyle"></div>
-    </div>
-    <div class="vue-slider-dot" :style="dotStyle">
-      <div class="vue-slider-dot-handle"></div>
-      <div
-        v-if="tooltip !== 'none'"
-        class="vue-slider-dot-tooltip vue-slider-dot-tooltip-top"
-      >
+      <div class="vue-slider-dot" :style="dotStyle">
+        <div class="vue-slider-dot-handle"></div>
         <div
-          class="vue-slider-dot-tooltip-wrapper"
-          :class="{ 'vue-slider-dot-tooltip-wrapper-show': dragging }"
+          v-if="tooltip !== 'none'"
+          class="vue-slider-dot-tooltip vue-slider-dot-tooltip-top"
         >
-          <div class="vue-slider-dot-tooltip-inner">
-            {{ formattedValue }}
+          <div
+            class="vue-slider-dot-tooltip-wrapper"
+            :class="{ 'vue-slider-dot-tooltip-wrapper-show': dragging }"
+          >
+            <div class="vue-slider-dot-tooltip-inner">
+              {{ formattedValue }}
+            </div>
           </div>
         </div>
       </div>
@@ -69,7 +69,12 @@ export default {
       return range > 0 ? ((this.displayValue - this.min) / range) * 100 : 0;
     },
     rootStyle() {
-      return { height: `${this.height}px` };
+      const halfDot = this.dotSize / 2;
+      return {
+        height: `${this.height}px`,
+        padding: `${halfDot}px 0`,
+        boxSizing: 'content-box',
+      };
     },
     processStyle() {
       return { width: `${this.percentage}%` };
@@ -93,7 +98,10 @@ export default {
   },
   methods: {
     clamp(value) {
-      return Math.min(this.effectiveMax, Math.max(this.min, Number(value) || 0));
+      return Math.min(
+        this.effectiveMax,
+        Math.max(this.min, Number(value) || 0)
+      );
     },
     valueFromPointer(event) {
       const rect = this.$refs.root.getBoundingClientRect();
@@ -150,20 +158,33 @@ export default {
 <style scoped>
 .vue-slider {
   position: relative;
+  box-sizing: content-box;
+  user-select: none;
+  display: block;
   width: 100%;
   cursor: pointer;
   touch-action: none;
 }
 
-.vue-slider-rail,
+.vue-slider-rail {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition-property: width, height, left, right, top, bottom;
+}
+
 .vue-slider-process {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  height: 100%;
+  z-index: 1;
 }
 
 .vue-slider-dot {
   position: absolute;
   top: 50%;
+  z-index: 5;
 }
 
 .vue-slider-dot-tooltip {

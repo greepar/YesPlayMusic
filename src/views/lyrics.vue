@@ -186,10 +186,7 @@
                 >
                   <svg-icon :icon-class="player.playing ? 'pause' : 'play'" />
                 </button-icon>
-                <button-icon
-                  :title="$t('player.next')"
-                  @click="playNextTrack"
-                >
+                <button-icon :title="$t('player.next')" @click="playNextTrack">
                   <svg-icon icon-class="next" />
                 </button-icon>
               </div>
@@ -1173,8 +1170,8 @@ export default {
 }
 
 .slide-up-enter,
+.slide-up-enter-from,
 .slide-up-leave-to
-
 /* .fade-leave-active below version 2.1.8 */ {
   transform: translateY(100%);
 }
@@ -1188,6 +1185,7 @@ export default {
 }
 
 .slide-fade-enter,
+.slide-fade-enter-from,
 .slide-fade-leave-to {
   transform: translateX(27vh);
   opacity: 0;

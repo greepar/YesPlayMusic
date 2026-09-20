@@ -96,8 +96,6 @@ jobs:
             dist_electron/*.dmg
             dist_electron/*.exe
             dist_electron/*.AppImage
-            dist_electron/latest*.yml
-            dist_electron/*.blockmap
           if-no-files-found: error
 
   release:
