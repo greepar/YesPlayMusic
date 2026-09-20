@@ -35,6 +35,7 @@ const delay = ms =>
   });
 const excludeSaveKeys = [
   '_playing',
+  '_playRequested',
   '_personalFMLoading',
   '_personalFMNextLoading',
 ];
@@ -59,6 +60,7 @@ export default class {
   constructor() {
     // 播放器状态
     this._playing = false; // 是否正在播放中
+    this._playRequested = false; // 异步加载期间是否收到过播放请求
     this._progress = 0; // 当前播放歌曲的进度
     this._enabled = false; // 是否启用Player
     this._repeatMode = 'off'; // off | on | one
@@ -70,6 +72,9 @@ export default class {
     this._personalFMNextLoading = false; // 是否正在缓存私人FM的下一首歌曲
     this._loadGeneration = 0;
     this._loading = false;
+    this._pendingSeek = null;
+    this._cacheTimer = null;
+    this._audioRecoveryAttempts = 0;
 
     // 播放信息
     this._list = []; // 播放列表
@@ -318,8 +323,13 @@ export default class {
       time,
     });
   }
-  _playAudioSource(source, autoplay = true) {
+  _playAudioSource(source, autoplay = true, track = this.currentTrack) {
     Howler.unload();
+    // Howler defaults HTML5 audio to `canplaythrough`. For a remote FLAC this
+    // can mean waiting for most (or all) of the file even though Chromium can
+    // already play and supports byte-range seeking. `canplay` is the correct
+    // readiness signal for streaming media.
+    Howler._canPlayEvent = 'canplay';
     this._howler = new Howl({
       src: [source],
       html5: true,
@@ -328,38 +338,134 @@ export default class {
       onend: () => {
         this._nextTrackCallback();
       },
+      onload: () => {
+        this._loading = false;
+        this._audioRecoveryAttempts = 0;
+        if (this._pendingSeek !== null) {
+          const target = this._pendingSeek;
+          this._pendingSeek = null;
+          this._howler?.seek(target);
+        }
+      },
     });
+    const sound = this._howler?._sounds?.[0];
+    const media = sound?._node;
+    if (media) {
+      const isCurrentMedia = () =>
+        this._howler?._sounds?.[0]?._node === media;
+      const applyPendingSeek = () => {
+        if (!isCurrentMedia() || this._pendingSeek === null) return;
+        const target = this._pendingSeek;
+        // Keep Howler's internal position in sync so its queued play starts at
+        // the requested point instead of resetting currentTime back to zero.
+        sound._seek = target;
+        sound._rateSeek = 0;
+        sound._ended = false;
+        if (media.readyState >= 1 && Number.isFinite(media.duration)) {
+          try {
+            media.currentTime = target;
+          } catch (error) {
+            console.debug('[debug][Player.js] early seek deferred', error);
+          }
+        }
+      };
+      media.addEventListener('loadedmetadata', applyPendingSeek);
+      media.addEventListener('seeking', () => {
+        if (isCurrentMedia()) this._loading = true;
+      });
+      media.addEventListener('waiting', () => {
+        if (isCurrentMedia()) this._loading = true;
+      });
+      media.addEventListener('canplay', () => {
+        if (isCurrentMedia()) this._loading = false;
+      });
+      media.addEventListener('playing', () => {
+        if (isCurrentMedia()) this._loading = false;
+      });
+      applyPendingSeek();
+    }
     this._howler.on('loaderror', (_, errCode) => {
       // https://developer.mozilla.org/en-US/docs/Web/API/MediaError/code
-      // code 3: MEDIA_ERR_DECODE
-      if (errCode === 3) {
-        this._playNextTrack(this._isPersonalFM);
-      } else if (errCode === 4) {
+      // An aborted request is expected when changing tracks or replacing a
+      // stream. It must not trigger a reload or skip to another song.
+      if (errCode === 1) return;
+      if (errCode === 4) {
         // code 4: MEDIA_ERR_SRC_NOT_SUPPORTED
+        this._loading = false;
+        this._playRequested = false;
+        this._setPlaying(false);
         store.dispatch('showToast', `无法播放: 不支持的音频格式`);
-        this._playNextTrack(this._isPersonalFM);
-      } else {
-        const t = this.progress;
+      } else if (errCode === 2 && this._audioRecoveryAttempts < 1) {
+        // Refresh an expired URL once for a genuine network error. Rebuilding
+        // the Howl repeatedly made long seeks slower and could loop forever.
+        const t = this._pendingSeek ?? this.progress;
+        const shouldResume = this._playing;
+        this._audioRecoveryAttempts += 1;
         this._replaceCurrentTrackAudio(this.currentTrack, false, false).then(
           replaced => {
             // 如果 replaced 为 false，代表当前的 track 已经不是这里想要替换的track
             // 此时则不修改当前的歌曲进度
             if (replaced) {
-              this._howler?.seek(t);
-              this.play();
+              this.seek(t, false);
+              if (shouldResume) this.play();
             }
           }
         );
+      } else {
+        this._loading = false;
+        this._playRequested = false;
+        this._setPlaying(false);
+        store.dispatch(
+          'showToast',
+          errCode === 3 ? '音频解码失败，请重试' : '音频加载失败，请重试'
+        );
       }
     });
-    if (autoplay) {
+    // A click can arrive while track metadata, IndexedDB or the source URL is
+    // still loading and `_howler` does not exist yet. Preserve that first
+    // click instead of requiring another click after construction.
+    if (autoplay || this._playRequested) {
       this.play();
       if (this._currentTrack.name) {
         setTitle(this._currentTrack);
       }
       setTrayLikeState(store.state.liked.songs.includes(this.currentTrack.id));
     }
+    this._scheduleTrackCache(track, source);
     this.setOutputDevice();
+  }
+
+  _scheduleTrackCache(track, source) {
+    if (
+      !store.state.settings.automaticallyCacheSongs ||
+      !track?.id ||
+      typeof source !== 'string' ||
+      source.startsWith('blob:')
+    )
+      return;
+    clearTimeout(this._cacheTimer);
+    // Start the streaming request first. Downloading the complete file before
+    // playback used to compete with Chromium's media range requests and made
+    // track changes and long seeks appear frozen.
+    const cacheWhenPlaybackIsNotCompeting = () => {
+      if (track.id !== this.currentTrackID) return;
+      const media = this._howler?._sounds?.[0]?._node;
+      const buffered = media?.buffered;
+      const bufferedUntil = buffered?.length
+        ? buffered.end(buffered.length - 1)
+        : 0;
+      // Never let the optional full-file cache download compete with active
+      // playback. Wait until the browser has buffered almost the whole track,
+      // or until the user pauses it.
+      if (this._playing && bufferedUntil < this.currentTrackDuration - 5) {
+        this._cacheTimer = setTimeout(cacheWhenPlaybackIsNotCompeting, 5000);
+        return;
+      }
+      Promise.resolve(cacheTrackSource(track, source)).catch(error => {
+        console.debug('[debug][Player.js] cache current track failed', error);
+      });
+    };
+    this._cacheTimer = setTimeout(cacheWhenPlaybackIsNotCompeting, 5000);
   }
   _getAudioSourceBlobURL(data) {
     // Create a new object URL.
@@ -391,9 +497,6 @@ export default class {
         if (!result.data[0].url) return null;
         if (result.data[0].freeTrialInfo !== null) return null; // 跳过只能试听的歌曲
         const source = result.data[0].url.replace(/^http:/, 'https:');
-        if (store.state.settings.automaticallyCacheSongs) {
-          cacheTrackSource(track, source, result.data[0].br);
-        }
         return source;
       });
     } else {
@@ -413,23 +516,36 @@ export default class {
     ifUnplayableThen = UNPLAYABLE_CONDITION.PLAY_NEXT_TRACK
   ) {
     const generation = ++this._loadGeneration;
-    this._loading = true;
+    this._playRequested = autoplay;
     if (autoplay && this._currentTrack.name) {
       this._scrobble(this.currentTrack, this._howler?.seek());
     }
+    // Stop the previous song synchronously. The selected row changes at once,
+    // while metadata and the stream continue loading in the background.
+    clearTimeout(this._cacheTimer);
+    Howler.unload();
+    this._howler = null;
+    this._setPlaying(false);
+    this._progress = 0;
+    this._pendingSeek = null;
+    this._audioRecoveryAttempts = 0;
+    this._loading = true;
+    this._currentTrack = { id, name: '', ar: [{ name: '' }], al: {}, dt: 0 };
     return getTrackDetail(id).then(data => {
       if (generation !== this._loadGeneration) return false;
       const track = data.songs[0];
       this._currentTrack = track;
+      setTitle(track);
       this._updateMediaSessionMetaData(track);
       return this._replaceCurrentTrackAudio(
         track,
         autoplay,
         true,
         ifUnplayableThen
-      ).finally(() => {
-        if (generation === this._loadGeneration) this._loading = false;
-      });
+      );
+    }).catch(error => {
+      if (generation === this._loadGeneration) this._loading = false;
+      throw error;
     });
   }
   /**
@@ -445,7 +561,7 @@ export default class {
       if (source) {
         let replaced = false;
         if (track.id === this.currentTrackID) {
-          this._playAudioSource(source, autoplay);
+          this._playAudioSource(source, autoplay, track);
           replaced = true;
         }
         if (isCacheNextTrack) {
@@ -730,19 +846,34 @@ export default class {
   }
 
   pause() {
-    this._howler?.fade(this.volume, 0, PLAY_PAUSE_FADE_DURATION);
+    this._playRequested = false;
+    const howler = this._howler;
+    if (!howler) {
+      this._setPlaying(false);
+      return;
+    }
+    howler.fade(this.volume, 0, PLAY_PAUSE_FADE_DURATION);
 
-    this._howler?.once('fade', () => {
-      this._howler?.pause();
+    howler.once('fade', () => {
+      // A track change during the fade must not pause the newly-created Howl.
+      howler.pause();
+      if (this._howler !== howler) return;
       this._setPlaying(false);
       setTitle(null);
       this._pauseDiscordPresence(this._currentTrack);
     });
   }
   play() {
-    if (this._howler?.playing()) return;
+    this._playRequested = true;
+    if (!this._howler) return false;
+    if (this._howler.playing()) return;
+    if (
+      this._howler.state() !== 'loaded' &&
+      this._howler._queue?.some(task => task.event === 'play')
+    )
+      return;
 
-    this._howler?.play();
+    this._howler.play();
 
     this._howler?.once('play', () => {
       this._howler?.fade(0, this.volume, PLAY_PAUSE_FADE_DURATION);
@@ -769,11 +900,43 @@ export default class {
       ipcRenderer?.send('seeked', time);
     }
     if (time !== null) {
-      this._howler?.seek(time);
+      const target = Math.max(
+        0,
+        Math.min(Number(time) || 0, this.currentTrackDuration)
+      );
+      if (!this._howler || this._howler.state() !== 'loaded') {
+        this._pendingSeek = target;
+        this._progress = target;
+        this._loading = true;
+        const sound = this._howler?._sounds?.[0];
+        const media = sound?._node;
+        if (sound) {
+          sound._seek = target;
+          sound._rateSeek = 0;
+          sound._ended = false;
+        }
+        // Once metadata is known, assigning currentTime immediately makes
+        // Chromium issue a byte-range request for the destination. Do not wait
+        // for Howler's full loaded state first.
+        if (
+          media?.readyState >= 1 &&
+          Number.isFinite(media.duration)
+        ) {
+          try {
+            media.currentTime = target;
+          } catch (error) {
+            console.debug('[debug][Player.js] seek deferred', error);
+          }
+        }
+      } else {
+        this._howler.seek(target);
+        this._progress = target;
+      }
       if (this._playing)
         this._playDiscordPresence(this._currentTrack, this.seek(null, false));
     }
-    return this._howler === null ? 0 : this._howler.seek();
+    if (this._pendingSeek !== null) return this._pendingSeek;
+    return this._howler === null ? this._progress : this._howler.seek();
   }
   mute() {
     if (this.volume === 0) {

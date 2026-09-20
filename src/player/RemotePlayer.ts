@@ -116,12 +116,18 @@ export default class RemotePlayer {
       this.progressAt = Date.now();
       this.state.progress = args[0];
     }
-    return this.ipc.invoke('player:command', {
+    const command = {
       requestId,
       sessionId: this.sessionId,
       name,
       args,
-    });
+    };
+    // Component callers may pass Vue 3 Proxies (for example a track). Strip
+    // reactivity at the process boundary so Electron can clone the payload.
+    return this.ipc.invoke(
+      'player:command',
+      JSON.parse(JSON.stringify(command))
+    );
   }
 
   seek(time: number | null = null, sendMpris = true) {
@@ -133,10 +139,14 @@ export default class RemotePlayer {
   sendSelfToIpcMain() {}
 
   get progress() {
-    if (!this.state.playing) return this.progressBase;
+    // Read the reactive value, not only the private interpolation base.
+    // Progress events update state.progress every 250 ms; using progressBase
+    // here left Vue with no changing dependency, so sliders stayed at 0:00
+    // while audio continued playing.
+    if (!this.state.playing) return this.state.progress;
     return Math.min(
       this.state.duration || Infinity,
-      this.progressBase + (Date.now() - this.progressAt) / 1000
+      this.state.progress + (Date.now() - this.progressAt) / 1000
     );
   }
   set progress(value: number) {

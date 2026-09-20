@@ -436,7 +436,10 @@ class Background {
   checkForUpdates() {
     if (isDevelopment) return;
     log('checkForUpdates');
-    autoUpdater.checkForUpdatesAndNotify();
+    autoUpdater.checkForUpdatesAndNotify().catch(error => {
+      // Unpacked development builds do not contain app-update.yml.
+      log(`update check skipped: ${error.message}`);
+    });
 
     const showNewVersionMessage = info => {
       dialog

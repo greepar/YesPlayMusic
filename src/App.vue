@@ -7,10 +7,20 @@
       :style="{ overflow: enableScrolling ? 'auto' : 'hidden' }"
       @scroll="handleScroll"
     >
-      <keep-alive :max="maxCachedViews">
-        <router-view v-if="$route.meta.keepAlive"></router-view>
-      </keep-alive>
-      <router-view v-if="!$route.meta.keepAlive"></router-view>
+      <router-view v-slot="{ Component, route }">
+        <keep-alive :max="maxCachedViews">
+          <component
+            :is="Component"
+            v-if="route.meta.keepAlive"
+            :key="route.fullPath"
+          />
+        </keep-alive>
+        <component
+          :is="Component"
+          v-if="!route.meta.keepAlive"
+          :key="route.fullPath"
+        />
+      </router-view>
     </main>
     <transition name="slide-up">
       <Player v-if="enablePlayer" v-show="showPlayer" ref="player" />
@@ -94,7 +104,6 @@ export default {
         this.$store.dispatch('fetchLikedAlbums');
         this.$store.dispatch('fetchLikedArtists');
         this.$store.dispatch('fetchLikedMVs');
-        this.$store.dispatch('fetchCloudDisk');
       }
     },
     handleScroll() {

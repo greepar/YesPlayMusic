@@ -1,4 +1,4 @@
-import Vue, { VNodeDirective } from 'vue';
+import type { App, DirectiveBinding } from 'vue';
 import { sizedImageUrl } from '@/utils/imagePerformance';
 import {
   isRenderingSuspended,
@@ -95,8 +95,9 @@ function updateImage(image: HTMLImageElement, source: string): void {
   renderImage(image, state);
 }
 
-Vue.directive('virtual-image', {
-  bind(image: HTMLImageElement, binding: VNodeDirective) {
+export function installVirtualImage(app: App): void {
+app.directive('virtual-image', {
+  beforeMount(image: HTMLImageElement, binding: DirectiveBinding) {
     image.decoding = 'async';
     // IntersectionObserver owns lazy loading. Native lazy loading would add a
     // second, browser-dependent threshold and defeat the explicit preload band.
@@ -112,15 +113,15 @@ Vue.directive('virtual-image', {
     image.src = observer === null && source ? source : EMPTY_IMAGE;
     observer?.observe(image);
   },
-  inserted(image: HTMLImageElement) {
+  mounted(image: HTMLImageElement) {
     image.loading = 'eager';
   },
-  update(image: HTMLImageElement, binding: VNodeDirective) {
+  updated(image: HTMLImageElement, binding: DirectiveBinding) {
     if (binding.value !== binding.oldValue || binding.arg !== binding.oldArg) {
       updateImage(image, resolveSource(binding.value, binding.arg));
     }
   },
-  unbind(image: HTMLImageElement) {
+  unmounted(image: HTMLImageElement) {
     image.removeEventListener('load', handleLoad);
     observer?.unobserve(image);
     pendingImages.delete(image);
@@ -129,3 +130,4 @@ Vue.directive('virtual-image', {
     image.src = EMPTY_IMAGE;
   },
 });
+}

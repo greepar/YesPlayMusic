@@ -5,7 +5,8 @@ export function getSendSettingsPlugin() {
     store.subscribe((mutation, state) => {
       // console.log(mutation);
       if (mutation.type !== 'updateSettings') return;
-      ipcRenderer.send('settings', state.settings);
+      // Vue 3 stores state in Proxies, which Electron cannot structured-clone.
+      ipcRenderer.send('settings', JSON.parse(JSON.stringify(state.settings)));
     });
   };
 }

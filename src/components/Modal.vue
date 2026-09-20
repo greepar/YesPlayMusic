@@ -125,7 +125,7 @@ export default {
     font-weight: 600;
     font-size: 20px;
   }
-  button {
+  :deep(button) {
     color: var(--color-text);
     border-radius: 50%;
     height: 32px;
@@ -165,12 +165,12 @@ export default {
       transform: scale(0.94);
     }
   }
-  button.primary {
+  :deep(button.primary) {
     color: var(--color-primary-bg);
     background: var(--color-primary-gradient);
     font-weight: 500;
   }
-  button.block {
+  :deep(button.block) {
     width: 100%;
     margin-left: 0;
     &:active {

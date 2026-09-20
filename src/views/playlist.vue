@@ -236,6 +236,7 @@
 </template>
 
 <script>
+import { markRaw } from 'vue';
 import { mapMutations, mapActions, mapState } from 'vuex';
 import NProgress from 'nprogress';
 import {
@@ -475,7 +476,7 @@ export default {
     },
     hydrateFromCache({ playlist, tracks }) {
       this.playlist = playlist;
-      this.tracks = tracks;
+      this.tracks = markRaw(tracks);
       this.lastLoadedTrackIndex = tracks.length - 1;
       this.hasMore = tracks.length < (playlist.trackIds?.length ?? 0);
       this.hydrated = true;
@@ -490,7 +491,7 @@ export default {
             this.hydrated && sameTrackIds(this.playlist, data.playlist);
           this.playlist = data.playlist;
           if (!keepTracks) {
-            this.tracks = data.playlist.tracks;
+            this.tracks = markRaw(data.playlist.tracks);
             this.lastLoadedTrackIndex = data.playlist.tracks.length - 1;
           }
           NProgress.done();
@@ -516,7 +517,7 @@ export default {
       });
       trackIDs = trackIDs.map(t => t.id);
       getTrackDetail(trackIDs.join(',')).then(data => {
-        this.tracks.push(...data.songs);
+        this.tracks = markRaw([...this.tracks, ...data.songs]);
         cacheLoadedTracks(this.id, this.tracks);
         this.lastLoadedTrackIndex += trackIDs.length;
         this.loadingMore = false;

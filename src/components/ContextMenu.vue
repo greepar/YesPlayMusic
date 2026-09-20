@@ -64,7 +64,10 @@ export default {
 };
 </script>
 
-<style lang="scss" scoped>
+<!-- Menu entries are supplied through a slot. Vue 3 does not apply this
+component's scope attribute to slotted nodes, so these container-qualified
+selectors must remain global to style the slot content. -->
+<style lang="scss">
 .context-menu {
   width: 100%;
   height: 100%;

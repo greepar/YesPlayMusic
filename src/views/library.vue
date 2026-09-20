@@ -249,6 +249,8 @@ export default {
       lyric: undefined,
       currentTab: 'playlists',
       playHistoryMode: 'week',
+      loadedLibraryTabs: new Set(),
+      loadingLibraryTabs: new Set(),
     };
   },
   computed: {
@@ -309,7 +311,7 @@ export default {
     this.loadData();
   },
   activated() {
-    this.$parent.$refs.scrollbar.restorePosition();
+    this.$root.$refs.scrollbar.restorePosition();
     this.loadData();
     dailyTask();
   },
@@ -337,8 +339,6 @@ export default {
       this.$store.dispatch('fetchLikedAlbums');
       this.$store.dispatch('fetchLikedArtists');
       this.$store.dispatch('fetchLikedMVs');
-      this.$store.dispatch('fetchCloudDisk');
-      this.$store.dispatch('fetchPlayHistory');
     },
     playLikedSongs() {
       this.$store.state.player.playPlaylistByID(
@@ -360,7 +360,27 @@ export default {
         return;
       }
       this.currentTab = tab;
+      this.loadTabData(tab);
       this.$parent.$refs.main.scrollTo({ top: 375, behavior: 'smooth' });
+    },
+    loadTabData(tab) {
+      const action = {
+        cloudDisk: 'fetchCloudDisk',
+        playHistory: 'fetchPlayHistory',
+      }[tab];
+      if (
+        !action ||
+        this.loadedLibraryTabs.has(tab) ||
+        this.loadingLibraryTabs.has(tab)
+      )
+        return;
+      this.loadingLibraryTabs.add(tab);
+      Promise.resolve(this.$store.dispatch(action))
+        .then(() => this.loadedLibraryTabs.add(tab))
+        .catch(error => {
+          console.debug(`[debug][library] ${action} failed`, error);
+        })
+        .finally(() => this.loadingLibraryTabs.delete(tab));
     },
     goToLikedSongsList() {
       this.$router.push({ path: '/library/liked-songs' });
@@ -411,11 +431,9 @@ export default {
       uploadSong(files[0])
         .then(result => {
           if (result.code === 200) {
-            let newCloudDisk = this.liked.cloudDisk;
-            newCloudDisk.unshift(result.privateCloud);
             this.$store.commit('updateLikedXXX', {
               name: 'cloudDisk',
-              data: newCloudDisk,
+              data: [result.privateCloud, ...this.liked.cloudDisk],
             });
           }
         })

@@ -1,5 +1,5 @@
 import clc from 'cli-color';
-import server from '@neteaseapireborn/api/server';
+import server from '@neteasecloudmusicapienhanced/api/server';
 
 export async function startNeteaseMusicApi() {
   // Let user know that the service is starting

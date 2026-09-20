@@ -148,7 +148,11 @@
           <div class="title"> {{ $t('settings.deviceSelector') }} </div>
         </div>
         <div class="right">
-          <select v-model="outputDevice">
+          <select
+            v-model="outputDevice"
+            @pointerenter="getAllOutputDevices"
+            @focus="getAllOutputDevices"
+          >
             <option
               v-for="device in allOutputDevices"
               :key="device.deviceId"
@@ -658,6 +662,8 @@ export default {
         recording: false,
       },
       recordedShortcut: [],
+      outputDevicesLoaded: false,
+      outputDevicesRequest: null,
     };
   },
   computed: {
@@ -1073,34 +1079,49 @@ export default {
     },
   },
   created() {
-    this.countDBSize('tracks');
-    if (process.env.IS_ELECTRON) this.getAllOutputDevices();
-  },
-  activated() {
-    this.countDBSize('tracks');
-    if (process.env.IS_ELECTRON) this.getAllOutputDevices();
+    this.countDBSize();
   },
   methods: {
     ...mapActions(['showToast']),
     getAllOutputDevices() {
-      navigator.mediaDevices.enumerateDevices().then(devices => {
-        this.allOutputDevices = devices.filter(device => {
-          return device.kind == 'audiooutput';
+      if (
+        !process.env.IS_ELECTRON ||
+        this.outputDevicesLoaded ||
+        this.outputDevicesRequest
+      )
+        return this.outputDevicesRequest;
+      // enumerateDevices starts Chromium's VideoCaptureService even when only
+      // audio outputs are requested. Delay that ~38 MiB utility process until
+      // the user actually interacts with the device selector.
+      this.outputDevicesRequest = navigator.mediaDevices
+        .enumerateDevices()
+        .then(devices => {
+          const outputs = devices.filter(device => {
+            return device.kind == 'audiooutput';
+          });
+          if (outputs.length > 0 && outputs[0].label !== '') {
+            this.allOutputDevices = outputs;
+            this.withoutAudioPriviledge = false;
+          } else {
+            this.allOutputDevices = [
+              {
+                deviceId: 'default',
+                label: 'settings.permissionRequired',
+              },
+            ];
+          }
+          this.outputDevicesLoaded = true;
+        })
+        .catch(error => {
+          console.debug(
+            '[debug][settings] enumerate output devices failed',
+            error
+          );
+        })
+        .finally(() => {
+          this.outputDevicesRequest = null;
         });
-        if (
-          this.allOutputDevices.length > 0 &&
-          this.allOutputDevices[0].label !== ''
-        ) {
-          this.withoutAudioPriviledge = false;
-        } else {
-          this.allOutputDevices = [
-            {
-              deviceId: 'default',
-              label: 'settings.permissionRequired',
-            },
-          ];
-        }
-      });
+      return this.outputDevicesRequest;
     },
     logout() {
       doLogout();

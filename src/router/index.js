@@ -1,9 +1,11 @@
-import Vue from 'vue';
-import VueRouter from 'vue-router';
+import {
+  createRouter,
+  createWebHashHistory,
+  createWebHistory,
+} from 'vue-router';
 import { isLooseLoggedIn, isAccountLoggedIn } from '@/utils/auth';
 import NProgress from 'nprogress';
 
-Vue.use(VueRouter);
 const loadExplore = () => import('@/views/explore.vue');
 export const preloadExplore = loadExplore;
 const routes = [
@@ -132,15 +134,12 @@ const routes = [
   },
 ];
 
-const router = new VueRouter({
-  mode: process.env.IS_ELECTRON ? 'hash' : 'history',
+const router = createRouter({
+  history: process.env.IS_ELECTRON
+    ? createWebHashHistory()
+    : createWebHistory(),
   routes,
 });
-
-const originalPush = VueRouter.prototype.push;
-VueRouter.prototype.push = function push(location) {
-  return originalPush.call(this, location).catch(err => err);
-};
 
 router.beforeEach((to, from, next) => {
   NProgress.start();

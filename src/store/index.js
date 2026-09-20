@@ -1,5 +1,4 @@
-import Vue from 'vue';
-import Vuex from 'vuex';
+import { createStore } from 'vuex';
 import state from './state';
 import mutations from './mutations';
 import actions from './actions';
@@ -9,8 +8,6 @@ import RemotePlayer from '@/player/RemotePlayer';
 // vuex 自定义插件
 import saveToLocalStorage from './plugins/localStorage';
 import { getSendSettingsPlugin } from './plugins/sendSettings';
-
-Vue.use(Vuex);
 
 let plugins = [saveToLocalStorage];
 if (process.env.IS_ELECTRON === true) {
@@ -24,7 +21,7 @@ const options = {
   plugins,
 };
 
-const store = new Vuex.Store(options);
+const store = createStore(options);
 
 if ([undefined, null].includes(store.state.settings.lang)) {
   const defaultLang = 'en';

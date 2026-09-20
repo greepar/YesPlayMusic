@@ -5,6 +5,7 @@ function resolve(dir) {
 }
 
 module.exports = {
+  lintOnSave: false,
   // 生产环境打包不输出 map
   productionSourceMap: false,
   devServer: {
@@ -49,10 +50,26 @@ module.exports = {
     },
   },
   chainWebpack(config) {
+    // Run the Vue 3 runtime in compatibility mode while the remaining Vue 2
+    // templates are migrated incrementally.
+    config.resolve.alias.set('vue$', '@vue/compat');
+    config.module
+      .rule('vue')
+      .use('vue-loader')
+      .tap(options => ({
+        ...options,
+        compilerOptions: {
+          ...(options.compilerOptions || {}),
+          compatConfig: { MODE: 2 },
+        },
+      }));
     // webpack 5 不再自带 Node 核心模块的 polyfill。
     // 网页版不会真正用到这些模块（相关代码都在 IS_ELECTRON 分支里），置空即可
     config.merge({
-      resolve: { fallback: { fs: false, path: false, child_process: false } },
+      resolve: {
+        extensions: ['.ts', '.js', '.vue', '.json'],
+        fallback: { fs: false, path: false, child_process: false },
+      },
     });
     if (!process.env.IS_ELECTRON) {
       // 网页版里 `process.platform` 之类的用法需要一个浏览器端的 process
@@ -79,6 +96,18 @@ module.exports = {
       .use('node-loader')
       .loader('node-loader')
       .end();
+
+    // Vue CLI's TypeScript plugin is tied to the pre-TypeScript-7 compiler
+    // API. esbuild handles the small number of .ts files in this legacy build
+    // until the webpack/Vue CLI layer is replaced.
+    config.module
+      .rule('typescript')
+      .test(/\.ts$/)
+      .exclude.add(/node_modules/)
+      .end()
+      .use('esbuild-loader')
+      .loader('esbuild-loader')
+      .options({ loader: 'ts', target: 'es2020' });
 
     // css-loader 6 会把 url(/img/xx.png) 当作文件系统路径去解析。
     // 这类以 / 开头的地址指向 public/ 下原样提供的静态资源，保持原样即可

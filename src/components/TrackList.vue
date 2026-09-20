@@ -175,7 +175,10 @@ export default {
         : this.rightClickedTrack;
     },
     virtualized() {
-      return this.type !== 'tracklist' && this.tracks.length > 200;
+      // A 200-track page used to miss virtualization because the threshold was
+      // strictly greater than 200. That kept every Vue row, icon and listener
+      // alive on the common first page returned by the playlist API.
+      return this.type !== 'tracklist' && this.tracks.length >= 100;
     },
     itemHeight() {
       return this.type === 'album' ? 48 : 64;

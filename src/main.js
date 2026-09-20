@@ -1,11 +1,11 @@
-import Vue from 'vue';
+import { createApp, configureCompat } from 'vue';
 import App from './App.vue';
 import router from './router';
 import store from './store';
 import i18n from '@/locale';
-import '@/assets/icons';
-import '@/utils/filters';
-import '@/directives/virtualImage';
+import { installIcons } from '@/assets/icons';
+import { installFilters } from '@/utils/filters';
+import { installVirtualImage } from '@/directives/virtualImage';
 import './registerServiceWorker';
 import { dailyTask } from '@/utils/common';
 import '@/assets/css/global.scss';
@@ -28,15 +28,26 @@ console.log(
   'background:unset;color:unset;'
 );
 
-Vue.config.productionTip = false;
+configureCompat({
+  MODE: 2,
+  // Vue 2 recursively merged component data. Modern plugin objects can be
+  // cyclic, causing the compat merger to overflow before components mount.
+  // This project has no mixins/extends that depend on deep data merging.
+  OPTIONS_DATA_MERGE: false,
+});
 
 NProgress.configure({ showSpinner: false, trickleSpeed: 100 });
 dailyTask();
 
-const app = new Vue({
-  i18n,
-  store,
-  router,
-  render: h => h(App),
-}).$mount('#app');
-window.__YESPLAYMUSIC_STORE__ = app.$store;
+const app = createApp(App);
+app.use(i18n);
+app.use(store);
+app.use(router);
+installIcons(app);
+installFilters(app);
+installVirtualImage(app);
+app.config.globalProperties.$copyText = async text => {
+  await navigator.clipboard.writeText(text);
+};
+app.mount('#app');
+window.__YESPLAYMUSIC_STORE__ = store;

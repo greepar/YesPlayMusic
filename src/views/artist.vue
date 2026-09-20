@@ -265,7 +265,7 @@ export default {
     if (this.artist?.id?.toString() !== this.$route.params.id) {
       this.loadData(this.$route.params.id);
     } else {
-      this.$parent.$refs.scrollbar.restorePosition();
+      this.$root.$refs.scrollbar.restorePosition();
     }
   },
   methods: {

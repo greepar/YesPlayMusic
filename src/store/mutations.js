@@ -1,9 +1,10 @@
 import shortcuts from '@/utils/shortcuts';
 import cloneDeep from 'lodash/cloneDeep';
+import { markRaw } from 'vue';
 
 export default {
   updateLikedXXX(state, { name, data }) {
-    state.liked[name] = data;
+    state.liked[name] = name === 'cloudDisk' ? markRaw(data) : data;
     if (name === 'songs') {
       state.player.sendSelfToIpcMain();
     }

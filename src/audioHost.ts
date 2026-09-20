@@ -39,6 +39,7 @@ function snapshot(): PlayerSnapshot {
 function stateSignature() {
   return JSON.stringify([
     player.currentTrackID,
+    player.currentTrack?.name,
     player.playing,
     !!player._loading,
     player.enabled,
@@ -59,7 +60,9 @@ function publish() {
   lastStateSignature = stateSignature();
   const next = snapshot();
   next.version = ++version;
-  ipc.send('player:snapshot', next);
+  // The player lives in Vuex and its nested values are Vue 3 Proxies. Electron
+  // IPC accepts plain structured-cloneable data only.
+  ipc.send('player:snapshot', JSON.parse(JSON.stringify(next)));
 }
 
 function tick() {
@@ -86,13 +89,13 @@ ipc.on('player:command', async (_: unknown, command: PlayerCommand) => {
       value = await player[command.name](...command.args);
     }
     publish();
-    ipc.send('player:result', {
+    ipc.send('player:result', JSON.parse(JSON.stringify({
       requestId: command.requestId,
       sessionId,
       ok: true,
       version,
       value,
-    });
+    })));
   } catch (error) {
     ipc.send('player:result', {
       requestId: command.requestId,
@@ -133,11 +136,21 @@ ipc.on('settings-sync', (_: unknown, settings: any) => {
 });
 ipc.on('player:restore', (_: unknown, previous: PlayerSnapshot) => {
   let attempts = 0;
+  const restoreTrackID = previous.currentTrackID;
+  const restoreProgress = previous.progress || 0;
   const restore = setInterval(() => {
     attempts += 1;
     if (player._howler) {
       clearInterval(restore);
-      player.seek(previous.progress || 0, false);
+      // Startup restore is only allowed to set the position while the same
+      // track is still at its initial position. A user seek or track change
+      // during startup must always win over this delayed timer.
+      if (
+        player.currentTrackID === restoreTrackID &&
+        Number(player.seek(null, false) || 0) < 1
+      ) {
+        player.seek(restoreProgress, false);
+      }
       if (previous.playing) player.play();
       publish();
     } else if (attempts >= 20) {

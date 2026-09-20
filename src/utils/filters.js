@@ -1,10 +1,10 @@
-import Vue from 'vue';
 import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import locale from '@/locale';
 
-Vue.filter('formatTime', (Milliseconds, format = 'HH:MM:SS') => {
+export function installFilters(app) {
+app.filter('formatTime', (Milliseconds, format = 'HH:MM:SS') => {
   if (!Milliseconds) return '';
   dayjs.extend(duration);
   dayjs.extend(relativeTime);
@@ -40,14 +40,14 @@ Vue.filter('formatTime', (Milliseconds, format = 'HH:MM:SS') => {
   }
 });
 
-Vue.filter('formatDate', (timestamp, format = 'MMM D, YYYY') => {
+app.filter('formatDate', (timestamp, format = 'MMM D, YYYY') => {
   if (!timestamp) return '';
   if (locale.locale === 'zh-CN') format = 'YYYY年MM月DD日';
   else if (locale.locale === 'zh-TW') format = 'YYYY年MM月DD日';
   return dayjs(timestamp).format(format);
 });
 
-Vue.filter('formatAlbumType', (type, album) => {
+app.filter('formatAlbumType', (type, album) => {
   if (!type) return '';
   if (type === 'EP/Single') {
     return album.size === 1 ? 'Single' : 'EP';
@@ -60,7 +60,7 @@ Vue.filter('formatAlbumType', (type, album) => {
   }
 });
 
-Vue.filter('resizeImage', (imgUrl, size = 512) => {
+app.filter('resizeImage', (imgUrl, size = 512) => {
   if (!imgUrl) return '';
   let httpsImgUrl = imgUrl;
   if (imgUrl.slice(0, 5) !== 'https') {
@@ -69,7 +69,7 @@ Vue.filter('resizeImage', (imgUrl, size = 512) => {
   return `${httpsImgUrl}?param=${size}y${size}`;
 });
 
-Vue.filter('formatPlayCount', count => {
+app.filter('formatPlayCount', count => {
   if (!count) return '';
   if (locale.locale === 'zh-CN') {
     if (count > 100000000) {
@@ -107,7 +107,8 @@ Vue.filter('formatPlayCount', count => {
   }
 });
 
-Vue.filter('toHttps', url => {
+app.filter('toHttps', url => {
   if (!url) return '';
   return url.replace(/^http:/, 'https:');
 });
+}
