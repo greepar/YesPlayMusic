@@ -14,6 +14,11 @@ export function setRenderingSuspended(suspended: boolean): void {
     'renderer-suspended',
     renderingSuspended
   );
+  if (suspended && window.gc) {
+    try {
+      window.gc();
+    } catch (_) {}
+  }
   listeners.forEach(listener => listener(renderingSuspended));
 }
 

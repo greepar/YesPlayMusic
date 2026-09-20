@@ -179,6 +179,7 @@ class Background {
     // Playback is initiated through IPC, so the hidden audio renderer never
     // receives a direct pointer gesture of its own.
     app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+    app.commandLine.appendSwitch('js-flags', '--expose-gc');
     // 界面和隐藏的音频页面同源（都是 localhost:27232），合并到同一个渲染进程里，
     // 省下一个独立的渲染进程（实测冷启动约 -190MB，进程数与没有音频后台时一致）。
     // 代价：这个渲染进程崩溃时界面和音频会一起停止（音频页面会被自动重建一次）。
