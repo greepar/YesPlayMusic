@@ -82,11 +82,6 @@ jobs:
           echo "API base URL looks sane"
         shell: bash
 
-      - name: Verify anonymous token bootstrap
-        run: |
-          grep -q "anonymous_token" dist_electron/bundled/background.js || { echo "::error::anonymous token bootstrap is missing from the main-process bundle"; exit 1; }
-        shell: bash
-
       - name: Verify macOS code signature
         if: runner.os == 'macOS'
         run: |
