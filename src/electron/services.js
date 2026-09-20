@@ -1,4 +1,5 @@
 import clc from 'cli-color';
+import '../utils/checkAuthToken';
 import server from '@neteasecloudmusicapienhanced/api/server';
 
 export async function startNeteaseMusicApi() {
