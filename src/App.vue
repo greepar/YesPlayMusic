@@ -110,6 +110,16 @@ export default {
       this.$refs.scrollbar.handleScroll();
     },
   },
+  watch: {
+    $route(to) {
+      if (to.meta.savePosition) return;
+      this.$nextTick(() => {
+        if (this.$refs.main) {
+          this.$refs.main.scrollTop = 0;
+        }
+      });
+    },
+  },
 };
 </script>
 
