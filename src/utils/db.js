@@ -5,6 +5,28 @@ import { warmCoverHttpCache } from '@/utils/imagePerformance';
 
 const db = new Dexie('yesplaymusic');
 
+function getSourceSize(source) {
+  return source?.size ?? source?.byteLength ?? 0;
+}
+
+db.version(5)
+  .stores({
+    trackSources: '&id, createTime',
+    trackSourceMetadata: '&id, createTime, size',
+  })
+  .upgrade(async tx => {
+    const metadata = tx.table('trackSourceMetadata');
+    await tx.table('trackSources').each(track =>
+      metadata.put({
+        id: track.id,
+        createTime: track.createTime || new Date().getTime(),
+        size: getSourceSize(track.source),
+        name: track.name,
+        artist: track.artist,
+      })
+    );
+  });
+
 db.version(4).stores({
   trackDetail: '&id, updateTime',
   lyric: '&id, updateTime',
@@ -42,10 +64,8 @@ function getCacheLimit() {
 async function initTracksCacheBytes() {
   if (!process.env.IS_ELECTRON) return;
   try {
-    tracksCacheBytes = 0;
-    await db.trackSources.each(t => {
-      tracksCacheBytes += t?.source?.byteLength || 0;
-    });
+    const sizes = await db.trackSourceMetadata.orderBy('size').keys();
+    tracksCacheBytes = sizes.reduce((total, size) => total + size, 0);
     console.debug(
       '[debug][db.js] initTracksCacheBytes, total bytes:',
       tracksCacheBytes
@@ -57,7 +77,12 @@ async function initTracksCacheBytes() {
 }
 
 // 模块加载时触发初始化
-initTracksCacheBytes();
+const isAudioHost = new URLSearchParams(window.location.search).has(
+  'audioHost'
+);
+const tracksCacheReady = isAudioHost
+  ? initTracksCacheBytes()
+  : Promise.resolve();
 
 async function deleteExcessCache() {
   const cacheLimit = getCacheLimit();
@@ -65,16 +90,22 @@ async function deleteExcessCache() {
   const limitBytes = cacheLimit * Math.pow(1024, 2);
   try {
     while (tracksCacheBytes >= limitBytes) {
-      const delCache = await db.trackSources.orderBy('createTime').first();
+      const delCache = await db.trackSourceMetadata
+        .orderBy('createTime')
+        .first();
       if (!delCache) break;
-      await db.trackSources.delete(delCache.id);
-      tracksCacheBytes -= delCache.source?.byteLength || 0;
+      await db.transaction(
+        'rw',
+        db.trackSources,
+        db.trackSourceMetadata,
+        async () => {
+          await db.trackSources.delete(delCache.id);
+          await db.trackSourceMetadata.delete(delCache.id);
+        }
+      );
+      tracksCacheBytes -= delCache.size;
       console.debug(
-        `[debug][db.js] deleteExcessCacheSuccess, track: ${
-          delCache.name
-        }, size: ${
-          delCache.source?.byteLength || 0
-        }, cacheSize:${tracksCacheBytes}`
+        `[debug][db.js] deleteExcessCacheSuccess, track: ${delCache.name}, size: ${delCache.size}, cacheSize:${tracksCacheBytes}`
       );
     }
   } catch (error) {
@@ -94,22 +125,43 @@ export function cacheTrackSource(trackInfo, url, bitRate, from = 'netease') {
   warmCoverHttpCache(trackInfo.al.picUrl);
   return axios
     .get(url, {
-      responseType: 'arraybuffer',
+      // Keep encoded audio outside the renderer's JS heap. Chromium can persist
+      // a Blob to IndexedDB without first creating a large ArrayBuffer.
+      responseType: 'blob',
     })
     .then(async response => {
-      const previous = await db.trackSources.get(Number(trackInfo.id));
-      await db.trackSources.put({
-        id: trackInfo.id,
-        source: response.data,
-        bitRate,
-        from,
-        name,
-        artist,
-        createTime: new Date().getTime(),
-      });
+      await tracksCacheReady;
+      const id = Number(trackInfo.id);
+      const createTime = new Date().getTime();
+      const size = getSourceSize(response.data);
+      let previousSize = 0;
+      await db.transaction(
+        'rw',
+        db.trackSources,
+        db.trackSourceMetadata,
+        async () => {
+          const previous = await db.trackSourceMetadata.get(id);
+          previousSize = previous?.size || 0;
+          await db.trackSources.put({
+            id,
+            source: response.data,
+            bitRate,
+            from,
+            name,
+            artist,
+            createTime,
+          });
+          await db.trackSourceMetadata.put({
+            id,
+            createTime,
+            size,
+            name,
+            artist,
+          });
+        }
+      );
       console.debug(`[debug][db.js] cached track 👉 ${name} by ${artist}`);
-      tracksCacheBytes +=
-        response.data.byteLength - (previous?.source?.byteLength || 0);
+      tracksCacheBytes += size - previousSize;
       await deleteExcessCache();
       return { trackID: trackInfo.id, source: response.data, bitRate };
     });
@@ -184,30 +236,25 @@ export function getAlbumFromCache(id) {
   });
 }
 
-export function countDBSize() {
-  const trackSizes = [];
-  return db.trackSources
-    .each(track => {
-      trackSizes.push(track.source.byteLength);
-    })
-    .then(() => {
-      const res = {
-        bytes: trackSizes.reduce((s1, s2) => s1 + s2, 0),
-        length: trackSizes.length,
-      };
-      tracksCacheBytes = res.bytes;
-      console.debug(
-        `[debug][db.js] load tracksCacheBytes: ${tracksCacheBytes}`
-      );
-      return res;
-    });
+export async function countDBSize() {
+  await tracksCacheReady;
+  return Promise.all([
+    db.trackSourceMetadata.orderBy('size').keys(),
+    db.trackSourceMetadata.count(),
+  ]).then(([trackSizes, length]) => {
+    const res = {
+      bytes: trackSizes.reduce((s1, s2) => s1 + s2, 0),
+      length,
+    };
+    tracksCacheBytes = res.bytes;
+    console.debug(`[debug][db.js] load tracksCacheBytes: ${tracksCacheBytes}`);
+    return res;
+  });
 }
 
 export function clearDB() {
-  return new Promise(resolve => {
-    db.tables.forEach(function (table) {
-      table.clear();
-    });
-    resolve();
+  return db.transaction('rw', db.tables, async () => {
+    await Promise.all(db.tables.map(table => table.clear()));
+    tracksCacheBytes = 0;
   });
 }
