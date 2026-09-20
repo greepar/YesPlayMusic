@@ -110,7 +110,7 @@ export default {
     this.focus = false;
     this.routeActive = false;
   },
-  beforeDestroy() {
+  beforeUnmount() {
     this.stopRenderingStateListener?.();
   },
   methods: {

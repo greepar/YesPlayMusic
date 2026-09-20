@@ -16,7 +16,7 @@
         <div v-if="showPlayCount" class="info">
           <span class="play-count"
             ><svg-icon icon-class="play" />{{
-              item.playCount | formatPlayCount
+              formatPlayCount(item.playCount)
             }}
           </span>
         </div>

@@ -50,19 +50,6 @@ module.exports = {
     },
   },
   chainWebpack(config) {
-    // Run the Vue 3 runtime in compatibility mode while the remaining Vue 2
-    // templates are migrated incrementally.
-    config.resolve.alias.set('vue$', '@vue/compat');
-    config.module
-      .rule('vue')
-      .use('vue-loader')
-      .tap(options => ({
-        ...options,
-        compilerOptions: {
-          ...(options.compilerOptions || {}),
-          compatConfig: { MODE: 2 },
-        },
-      }));
     // webpack 5 不再自带 Node 核心模块的 polyfill。
     // 网页版不会真正用到这些模块（相关代码都在 IS_ELECTRON 分支里），置空即可
     config.merge({

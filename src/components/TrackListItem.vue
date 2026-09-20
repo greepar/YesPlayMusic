@@ -80,7 +80,7 @@
       </button>
     </div>
     <div v-if="showTrackTime" class="time">
-      {{ track.dt | formatTime }}
+      {{ formatTime(track.dt) }}
     </div>
 
     <div v-if="track.playCount" class="count"> {{ track.playCount }}</div>
@@ -241,7 +241,7 @@ export default {
     this.routeActive = false;
   },
 
-  beforeDestroy() {
+  beforeUnmount() {
     this.stopRenderingStateListener?.();
   },
 

@@ -4,10 +4,10 @@
       <Win32Titlebar v-if="enableWin32Titlebar" />
       <LinuxTitlebar v-if="enableLinuxTitlebar" />
       <div class="navigation-buttons">
-        <button-icon @click.native="go('back')"
+        <button-icon @click="go('back')"
           ><svg-icon icon-class="arrow-left"
         /></button-icon>
-        <button-icon @click.native="go('forward')"
+        <button-icon @click="go('forward')"
           ><svg-icon icon-class="arrow-right"
         /></button-icon>
       </div>
@@ -18,8 +18,8 @@
         <router-link
           to="/explore"
           :class="{ active: $route.name === 'explore' }"
-          @pointerenter.native="prepareExplore"
-          @pointerdown.native="prepareExplore"
+          @pointerenter="prepareExplore"
+          @pointerdown="prepareExplore"
           >{{ $t('nav.explore') }}</router-link
         >
         <router-link

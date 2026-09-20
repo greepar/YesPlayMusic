@@ -1,4 +1,4 @@
-import Vue from 'vue';
+import { reactive } from 'vue';
 import type {
   PlayerCommandResult,
   PlayerProgress,
@@ -49,7 +49,7 @@ export default class RemotePlayer {
 
   constructor() {
     this.ipc = window.require('electron').ipcRenderer;
-    this.state = Vue.observable({
+    this.state = reactive({
       playing: false,
       progress: 0,
       duration: 0,
@@ -156,7 +156,7 @@ export default class RemotePlayer {
     return this.state.duration;
   }
 
-  // Vue 2 observes these prototype accessors when the instance is installed in state.
+  // These accessors depend on the reactive snapshot state above.
   get enabled() {
     return this.state.enabled;
   }

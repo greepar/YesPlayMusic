@@ -162,7 +162,7 @@ export default {
     }
     this.getQrCodeKey();
   },
-  beforeDestroy() {
+  beforeUnmount() {
     clearInterval(this.qrCodeCheckInterval);
     if (this.qrUiLocked) window.uiActivityLock?.release();
   },

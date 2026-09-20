@@ -68,8 +68,8 @@
         :track-prop="entry.track"
         :track-no="entry.index + 1"
         :highlight-playing-track="highlightPlayingTrack"
-        @dblclick.native="playThisList(entry.track.id || entry.track.songId)"
-        @click.right.native="openMenu($event, entry.track, entry.index)"
+        @dblclick="playThisList(entry.track.id || entry.track.songId)"
+        @click.right="openMenu($event, entry.track, entry.index)"
       />
       <div v-if="virtualized" :style="bottomSpacerStyle"></div>
     </div>
@@ -235,7 +235,7 @@ export default {
   activated() {
     this.$nextTick(this.updateViewport);
   },
-  beforeDestroy() {
+  beforeUnmount() {
     this.scrollContainer?.removeEventListener(
       'scroll',
       this.scheduleViewportUpdate

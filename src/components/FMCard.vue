@@ -13,17 +13,17 @@
       </div>
       <div class="controls">
         <div class="buttons">
-          <button-icon title="不喜欢" @click.native="moveToFMTrash">
+          <button-icon title="不喜欢" @click="moveToFMTrash">
             <svg-icon id="thumbs-down" icon-class="thumbs-down" />
           </button-icon>
           <button-icon
             :title="$t(isPlaying ? 'player.pause' : 'player.play')"
             class="play"
-            @click.native="play"
+            @click="play"
           >
             <svg-icon :icon-class="isPlaying ? 'pause' : 'play'" />
           </button-icon>
-          <button-icon :title="$t('player.next')" @click.native="next">
+          <button-icon :title="$t('player.next')" @click="next">
             <svg-icon icon-class="next" />
           </button-icon>
         </div>
@@ -69,7 +69,7 @@ export default {
   created() {
     this.getColor();
   },
-  beforeDestroy() {
+  beforeUnmount() {
     this.colorRequestId += 1;
   },
   methods: {

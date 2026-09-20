@@ -1,4 +1,4 @@
-import { createApp, configureCompat } from 'vue';
+import { createApp } from 'vue';
 import App from './App.vue';
 import router from './router';
 import store from './store';
@@ -27,14 +27,6 @@ console.log(
   'background: #eaeffd;color:#335eea;padding: 4px 6px;border-radius:3px;',
   'background:unset;color:unset;'
 );
-
-configureCompat({
-  MODE: 2,
-  // Vue 2 recursively merged component data. Modern plugin objects can be
-  // cyclic, causing the compat merger to overflow before components mount.
-  // This project has no mixins/extends that depend on deep data merging.
-  OPTIONS_DATA_MERGE: false,
-});
 
 NProgress.configure({ showSpinner: false, trickleSpeed: 100 });
 dailyTask();

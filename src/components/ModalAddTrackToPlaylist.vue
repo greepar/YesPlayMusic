@@ -7,7 +7,7 @@
     title="添加到歌单"
     width="25vw"
   >
-    <template slot="default">
+    <template #default>
       <div class="new-playlist-button" @click="newPlaylist"
         ><svg-icon icon-class="plus" />新建歌单</div
       >
