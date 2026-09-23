@@ -108,6 +108,10 @@ export default class {
     Object.defineProperty(this, '_howler', {
       enumerable: false,
     });
+    this._cloudDecode = null;
+    Object.defineProperty(this, '_cloudDecode', { enumerable: false });
+    this._cloudWav = null;
+    Object.defineProperty(this, '_cloudWav', { enumerable: false });
 
     // init
     this._init();
@@ -203,7 +207,12 @@ export default class {
     return this._personalFMTrack;
   }
   get currentTrackDuration() {
-    const trackDuration = this._currentTrack.dt || 1000;
+    const mediaDuration = this._howler?._sounds?.[0]?._node?.duration;
+    const trackDuration =
+      this._currentTrack.dt ||
+      (Number.isFinite(mediaDuration) && mediaDuration > 0
+        ? mediaDuration * 1000
+        : 1000);
     let duration = ~~(trackDuration / 1000);
     return duration > 1 ? duration - 1 : duration;
   }
@@ -329,6 +338,7 @@ export default class {
     });
   }
   _playAudioSource(source, autoplay = true, track = this.currentTrack) {
+    const requested = autoplay || this._playRequested;
     Howler.unload();
     // Howler defaults HTML5 audio to `canplaythrough`. For a remote FLAC this
     // can mean waiting for most (or all) of the file even though Chromium can
@@ -339,7 +349,7 @@ export default class {
       src: [source],
       html5: true,
       preload: true,
-      format: ['mp3', 'flac'],
+      format: [source === this._cloudWav ? 'wav' : 'mp3'],
       onend: () => {
         this._nextTrackCallback();
       },
@@ -429,7 +439,7 @@ export default class {
     // A click can arrive while track metadata, IndexedDB or the source URL is
     // still loading and `_howler` does not exist yet. Preserve that first
     // click instead of requiring another click after construction.
-    if (autoplay || this._playRequested) {
+    if (requested) {
       this.play();
       if (this._currentTrack.name) {
         setTitle(this._currentTrack);
@@ -475,18 +485,25 @@ export default class {
   }
   _getAudioSourceBlobURL(data) {
     // Create a new object URL.
-    const source = URL.createObjectURL(new Blob([data]));
+    const source = URL.createObjectURL(
+      data instanceof Blob ? data : new Blob([data])
+    );
 
     // Clean up the previous object URLs since we've created a new one.
     // Revoke object URLs can release the memory taken by a Blob,
     // which occupied a large proportion of memory.
+    const activeSource = this._howler?._src;
     for (const url of this.createdBlobRecords) {
+      if (url === activeSource) continue;
       URL.revokeObjectURL(url);
     }
 
     // Then, we replace the createBlobRecords with new one with
     // our newly created object URL.
-    this.createdBlobRecords = [source];
+    this.createdBlobRecords = [
+      ...this.createdBlobRecords.filter(url => url === activeSource),
+      source,
+    ];
 
     return source;
   }
@@ -541,6 +558,10 @@ export default class {
     // Stop the previous song synchronously. The selected row changes at once,
     // while metadata and the stream continue loading in the background.
     clearTimeout(this._cacheTimer);
+    this._cloudDecode?.abort();
+    this._cloudDecode = null;
+    if (this._cloudWav) URL.revokeObjectURL(this._cloudWav);
+    this._cloudWav = null;
     Howler.unload();
     this._howler = null;
     this._setPlaying(false);
@@ -593,7 +614,40 @@ export default class {
     isCacheNextTrack,
     ifUnplayableThen = UNPLAYABLE_CONDITION.PLAY_NEXT_TRACK
   ) {
-    return this._getAudioSource(track).then(source => {
+    const generation = this._loadGeneration;
+    return this._getAudioSource(track).then(async source => {
+      if (generation !== this._loadGeneration) return false;
+      if (
+        isElectron &&
+        source &&
+        this._playlistSource.type === 'cloudDisk' &&
+        (/\.m4a(?:[?#]|$)/i.test(source) || source.startsWith('blob:'))
+      ) {
+        const controller = new AbortController();
+        this._cloudDecode = controller;
+        try {
+          const { prepareCloudM4a } = await import('@/utils/alac');
+          const wav = await prepareCloudM4a(source, controller.signal);
+          if (generation !== this._loadGeneration || controller.signal.aborted) {
+            if (wav) URL.revokeObjectURL(wav);
+            return false;
+          }
+          if (wav) {
+            source = wav;
+            this._cloudWav = wav;
+          }
+        } catch (error) {
+          if (generation !== this._loadGeneration || controller.signal.aborted)
+            return false;
+          console.debug('[debug][Player.js] ALAC decode failed', error);
+          this._loading = false;
+          this._playRequested = false;
+          store.dispatch('showToast', '无法播放: 不支持的音频格式');
+          return false;
+        } finally {
+          if (this._cloudDecode === controller) this._cloudDecode = null;
+        }
+      }
       if (source) {
         let replaced = false;
         if (track.id === this.currentTrackID) {
@@ -625,6 +679,7 @@ export default class {
     });
   }
   _cacheNextTrack() {
+    if (this._playlistSource.type === 'cloudDisk') return;
     let nextTrackID = this._isPersonalFM
       ? this._personalFMNextTrack?.id ?? 0
       : this._getNextTrack()[0];

@@ -40,6 +40,7 @@ function stateSignature() {
   return JSON.stringify([
     player.currentTrackID,
     player.currentTrack?.name,
+    player.currentTrackDuration,
     player.playing,
     !!player._loading,
     player.enabled,

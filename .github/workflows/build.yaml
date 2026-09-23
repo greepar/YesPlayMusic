@@ -47,6 +47,14 @@ jobs:
           sudo apt-get update &&
           sudo apt-get install --no-install-recommends -y libopenjp2-tools
 
+      # Two transitive dependencies use github: URLs which Yarn resolves via
+      # SSH. Hosted runners have no SSH key; fetch these public repos via HTTPS.
+      - name: Use HTTPS for public GitHub dependencies
+        run: |
+          git config --global --add url.https://github.com/.insteadOf ssh://git@github.com/
+          git config --global --add url.https://github.com/.insteadOf git@github.com:
+        shell: bash
+
       - name: Install dependencies
         run: yarn --ignore-engines --ignore-optional
         shell: bash
@@ -101,8 +109,8 @@ jobs:
   release:
     name: Publish GitHub Release
     needs: build
-    # 某个平台失败时，其余平台的产物仍然发布
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') }}
+    # 只有全部平台构建成功才发布，避免失败时创建不完整的 Release
+    if: ${{ success() && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

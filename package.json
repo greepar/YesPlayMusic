@@ -1,6 +1,6 @@
 {
   "name": "yesplaymusic",
-  "version": "0.6.7",
+  "version": "0.6.8",
   "private": true,
   "description": "A third party music player for Netease Music",
   "author": "qier222<qier222@outlook.com>",
@@ -26,6 +26,7 @@
     "node": ">=24.0.0 <25"
   },
   "dependencies": {
+    "@audio/decode-aac": "1.5.0",
     "@neteasecloudmusicapienhanced/api": "^4.40.1",
     "axios": "^1.20.0",
     "change-case": "^5.4.4",

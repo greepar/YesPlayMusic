@@ -231,8 +231,11 @@
             ref="lyricsContainer"
             class="lyrics-container"
             :style="lyricFontSize"
+            @wheel.passive="pauseAutoScroll"
+            @touchstart.passive="pauseAutoScroll"
+            @pointerdown="pauseAutoScroll"
           >
-            <div id="line-1" class="line"></div>
+            <div class="lyrics-spacer" aria-hidden="true"></div>
             <div
               v-for="(line, index) in lyricToShow"
               :id="`line${index}`"
@@ -262,7 +265,12 @@
                 >
               </div>
             </div>
-            <ContextMenu v-if="!noLyric" ref="lyricMenu">
+            <div class="lyrics-spacer" aria-hidden="true"></div>
+            <ContextMenu
+              v-if="!noLyric"
+              ref="lyricMenu"
+              class="lyric-context-menu"
+            >
               <div class="item" @click="copyLyric(false)">{{
                 $t('contextMenu.copyLyric')
               }}</div>
@@ -339,6 +347,9 @@ export default {
       colorRequestId: 0,
       renderingSuspended: isRenderingSuspended(),
       stopRenderingStateListener: null,
+      lyricScrollFrame: null,
+      lyricScrollPausedUntil: 0,
+      lyricScrollResumeTimer: null,
     };
   },
   computed: {
@@ -455,6 +466,9 @@ export default {
   },
   watch: {
     currentTrack() {
+      this.cancelLyricScroll();
+      this.highlightLyricIndex = -1;
+      if (this.$refs.lyricsContainer) this.$refs.lyricsContainer.scrollTop = 0;
       this.getLyric();
       this.getCoverColor();
     },
@@ -463,13 +477,21 @@ export default {
         this.setLyricsInterval();
         this.initDate();
         this.$store.commit('enableScrolling', false);
+        this.$nextTick(() => this.scrollToCurrentLyric(false));
       } else {
+        this.cancelLyricScroll();
+        clearTimeout(this.lyricScrollResumeTimer);
         clearInterval(this.lyricsInterval);
         this.lyricsInterval = null;
         clearInterval(this.timer);
         this.timer = null;
         this.$store.commit('enableScrolling', true);
       }
+    },
+    lyricToShow() {
+      this.cancelLyricScroll();
+      this.highlightLyricIndex = -1;
+      this.$nextTick(() => this.updateHighlightedLyric(false));
     },
   },
   created() {
@@ -490,6 +512,8 @@ export default {
     this.stopRenderingStateListener?.();
     clearInterval(this.timer);
     clearInterval(this.lyricsInterval);
+    this.cancelLyricScroll();
+    clearTimeout(this.lyricScrollResumeTimer);
     document.removeEventListener('keydown', this.handleFullscreenKeydown);
     document.removeEventListener(
       'fullscreenchange',
@@ -505,6 +529,8 @@ export default {
       clearInterval(this.lyricsInterval);
       this.timer = null;
       this.lyricsInterval = null;
+      this.cancelLyricScroll();
+      clearTimeout(this.lyricScrollResumeTimer);
       if (!suspended && this.showLyrics) {
         this.setLyricsInterval();
         this.initDate();
@@ -647,6 +673,8 @@ export default {
     },
     clickLyricLine(value, startPlay = false) {
       // TODO: 双击选择还会选中文字，考虑搞个右键菜单复制歌词
+      const shouldResumeAutoScroll =
+        this.lyricScrollPausedUntil > performance.now();
       let jumpFlag = false;
       this.lyric.filter(function (item) {
         if (item.content == '纯音乐，请欣赏') {
@@ -655,6 +683,11 @@ export default {
       });
       if (window.getSelection().toString().length === 0 && !jumpFlag) {
         this.player.seek(value);
+        if (shouldResumeAutoScroll) {
+          clearTimeout(this.lyricScrollResumeTimer);
+          this.lyricScrollPausedUntil = 0;
+          this.updateHighlightedLyric();
+        }
       }
       if (startPlay === true) {
         this.player.play();
@@ -677,50 +710,101 @@ export default {
     },
     setLyricsInterval() {
       clearInterval(this.lyricsInterval);
-      this.lyricsInterval = setInterval(() => {
-        const progress = this.player.seek(null, false) ?? 0;
-        const oldHighlightLyricIndex = this.highlightLyricIndex;
-        let index = oldHighlightLyricIndex;
+      this.updateHighlightedLyric(false);
+      this.lyricsInterval = setInterval(
+        () => this.updateHighlightedLyric(),
+        50
+      );
+    },
+    updateHighlightedLyric(animate = true) {
+      const progress = this.player.seek(null, false) ?? 0;
+      const oldHighlightLyricIndex = this.highlightLyricIndex;
+      const lines = this.lyricToShow;
+      let index = oldHighlightLyricIndex;
 
-        if (this.lyric.length === 0 || progress < this.lyric[0].time) {
-          index = -1;
-        } else if (
-          index < 0 ||
-          index >= this.lyric.length ||
-          progress < this.lyric[index].time
-        ) {
-          // Seek/backward jumps use binary search instead of scanning every line.
-          let low = 0;
-          let high = this.lyric.length - 1;
-          while (low <= high) {
-            const middle = (low + high) >> 1;
-            if (this.lyric[middle].time <= progress) {
-              index = middle;
-              low = middle + 1;
-            } else {
-              high = middle - 1;
-            }
-          }
-        } else {
-          // Normal playback only advances across newly reached lines.
-          while (
-            index + 1 < this.lyric.length &&
-            this.lyric[index + 1].time <= progress
-          ) {
-            index += 1;
+      if (lines.length === 0 || progress < lines[0].time) {
+        index = -1;
+      } else if (
+        index < 0 ||
+        index >= lines.length ||
+        progress < lines[index].time
+      ) {
+        // Seek/backward jumps use binary search instead of scanning every line.
+        let low = 0;
+        let high = lines.length - 1;
+        while (low <= high) {
+          const middle = (low + high) >> 1;
+          if (lines[middle].time <= progress) {
+            index = middle;
+            low = middle + 1;
+          } else {
+            high = middle - 1;
           }
         }
-
-        this.highlightLyricIndex = index;
-        if (oldHighlightLyricIndex !== this.highlightLyricIndex) {
-          const el = document.getElementById(`line${this.highlightLyricIndex}`);
-          if (el)
-            el.scrollIntoView({
-              behavior: 'smooth',
-              block: 'center',
-            });
+      } else {
+        // Normal playback only advances across newly reached lines.
+        while (index + 1 < lines.length && lines[index + 1].time <= progress) {
+          index += 1;
         }
-      }, 50);
+      }
+
+      this.highlightLyricIndex = index;
+      if (oldHighlightLyricIndex !== index && index >= 0) {
+        this.$nextTick(() => this.scrollToCurrentLyric(animate));
+      }
+    },
+    cancelLyricScroll() {
+      if (this.lyricScrollFrame !== null) {
+        cancelAnimationFrame(this.lyricScrollFrame);
+        this.lyricScrollFrame = null;
+      }
+    },
+    pauseAutoScroll() {
+      this.cancelLyricScroll();
+      this.lyricScrollPausedUntil = performance.now() + 3000;
+      clearTimeout(this.lyricScrollResumeTimer);
+      this.lyricScrollResumeTimer = setTimeout(() => {
+        this.lyricScrollResumeTimer = null;
+        this.scrollToCurrentLyric();
+      }, 3100);
+    },
+    scrollToCurrentLyric(animate = true) {
+      const container = this.$refs.lyricsContainer;
+      if (!container || !this.showLyrics || this.renderingSuspended) return;
+      if (performance.now() < this.lyricScrollPausedUntil) return;
+      if (this.highlightLyricIndex < 0) return;
+      const line = container.querySelector(`#line${this.highlightLyricIndex}`);
+      if (!line) return;
+
+      this.cancelLyricScroll();
+      const start = container.scrollTop;
+      const target = Math.max(
+        0,
+        Math.min(
+          container.scrollHeight - container.clientHeight,
+          start +
+            line.getBoundingClientRect().top -
+            container.getBoundingClientRect().top +
+            line.offsetHeight / 2 -
+            container.clientHeight / 2
+        )
+      );
+      if (
+        !animate ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ) {
+        container.scrollTop = target;
+        return;
+      }
+      const started = performance.now();
+      const duration = 650;
+      const step = now => {
+        const t = Math.min(1, (now - started) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        container.scrollTop = start + (target - start) * eased;
+        this.lyricScrollFrame = t < 1 ? requestAnimationFrame(step) : null;
+      };
+      this.lyricScrollFrame = requestAnimationFrame(step);
     },
     moveToFMTrash() {
       this.player.moveToFMTrash();
@@ -1063,8 +1147,15 @@ export default {
       }
     }
 
-    .line#line-1:hover {
-      background: unset;
+    .lyrics-spacer {
+      flex: 0 0 50%;
+      pointer-events: none;
+    }
+
+    .lyric-context-menu {
+      position: absolute;
+      width: 0;
+      height: 0;
     }
 
     .translation {
@@ -1087,14 +1178,6 @@ export default {
 
   ::-webkit-scrollbar {
     display: none;
-  }
-
-  .lyrics-container .line:first-child {
-    margin-top: 50vh;
-  }
-
-  .lyrics-container .line:last-child {
-    margin-bottom: calc(50vh - 128px);
   }
 }
 
