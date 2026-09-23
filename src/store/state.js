@@ -45,6 +45,10 @@ export default {
       show: false,
       afterCreateAddTrackID: 0,
     },
+    downloadTrackModal: {
+      show: false,
+      selectedTrack: null,
+    },
   },
   dailyTracks: [],
   player: JSON.parse(localStorage.getItem('player')),

@@ -48,7 +48,7 @@ export default {
       };
     },
     main() {
-      return this.$parent.$refs.main;
+      return this.$parent?.$refs?.main || document.querySelector('main');
     },
   },
 

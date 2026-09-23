@@ -219,6 +219,63 @@
         </div>
       </div>
 
+      <h3>{{ $t('settings.download.title') }}</h3>
+      <div class="item">
+        <div class="left">
+          <div class="title">{{ $t('settings.download.quality') }}</div>
+        </div>
+        <div class="right">
+          <select v-model="downloadQuality">
+            <option :value="128000">
+              {{ $t('settings.musicQuality.low') }} - 128Kbps
+            </option>
+            <option :value="192000">
+              {{ $t('settings.musicQuality.medium') }} - 192Kbps
+            </option>
+            <option :value="320000">
+              {{ $t('settings.musicQuality.high') }} - 320Kbps
+            </option>
+            <option value="flac">
+              {{ $t('settings.musicQuality.lossless') }} - FLAC
+            </option>
+            <option :value="999000">Hi-Res</option>
+          </select>
+        </div>
+      </div>
+      <div class="item">
+        <div class="left">
+          <div class="title">{{ $t('settings.download.askBeforeDownload') }}</div>
+        </div>
+        <div class="right">
+          <div class="toggle">
+            <input
+              id="ask-before-download"
+              v-model="askBeforeDownload"
+              type="checkbox"
+              name="ask-before-download"
+            />
+            <label for="ask-before-download"></label>
+          </div>
+        </div>
+      </div>
+      <div v-if="isElectron" class="item">
+        <div class="left">
+          <div class="title">{{ $t('settings.download.path') }}</div>
+          <div class="description">{{ currentDownloadPathDisplay }}</div>
+        </div>
+        <div class="right">
+          <button @click="changeDownloadPath">{{ $t('settings.download.changePath') }}</button>
+          <button
+            v-if="settings.downloadPath"
+            style="margin-left: 10px;"
+            @click="resetDownloadPath"
+          >
+            {{ $t('settings.download.resetDefault') || '恢复默认' }}
+          </button>
+          <button style="margin-left: 10px;" @click="openDownloadPath">{{ $t('settings.download.openFolder') }}</button>
+        </div>
+      </div>
+
       <h3>{{ $t('settings.lyric') }}</h3>
       <div class="item">
         <div class="left">
@@ -634,11 +691,10 @@ import {
 } from '@/utils/common';
 import { countDBSize, clearDB } from '@/utils/db';
 import pkg from '../../package.json';
+import { isElectron, getElectron, getIpcRenderer } from '@/utils/platform';
 
-const electron =
-  process.env.IS_ELECTRON === true ? window.require('electron') : null;
-const ipcRenderer =
-  process.env.IS_ELECTRON === true ? electron.ipcRenderer : null;
+const electron = getElectron();
+const ipcRenderer = getIpcRenderer();
 
 const validShortcutCodes = ['=', '-', '~', '[', ']', ';', "'", ',', '.', '/'];
 
@@ -656,6 +712,7 @@ export default {
           label: 'settings.permissionRequired',
         },
       ],
+      defaultDownloadDir: '',
       shortcutInput: {
         id: '',
         type: '',
@@ -669,7 +726,7 @@ export default {
   computed: {
     ...mapState(['player', 'settings', 'data']),
     isElectron() {
-      return process.env.IS_ELECTRON;
+      return isElectron;
     },
     isMac() {
       return /macintosh|mac os x/i.test(navigator.userAgent);
@@ -808,6 +865,34 @@ export default {
         this.$store.commit('changeMusicQuality', value);
         this.clearCache();
       },
+    },
+    downloadQuality: {
+      get() {
+        return this.settings.downloadQuality ?? 320000;
+      },
+      set(value) {
+        this.$store.commit('updateSettings', {
+          key: 'downloadQuality',
+          value,
+        });
+      },
+    },
+    askBeforeDownload: {
+      get() {
+        return this.settings.askBeforeDownload ?? true;
+      },
+      set(value) {
+        this.$store.commit('updateSettings', {
+          key: 'askBeforeDownload',
+          value,
+        });
+      },
+    },
+    currentDownloadPathDisplay() {
+      if (this.settings.downloadPath && this.settings.downloadPath.trim() !== '') {
+        return this.settings.downloadPath;
+      }
+      return this.defaultDownloadDir || '下载文件夹/YesPlayMusic';
     },
     lyricFontSize: {
       get() {
@@ -1080,6 +1165,12 @@ export default {
   },
   created() {
     this.countDBSize();
+    const ipc = getIpcRenderer();
+    if (this.isElectron && ipc) {
+      ipc.invoke('get-default-download-dir').then(dir => {
+        this.defaultDownloadDir = dir;
+      });
+    }
   },
   methods: {
     ...mapActions(['showToast']),
@@ -1235,6 +1326,37 @@ export default {
     restoreDefaultShortcuts() {
       this.$store.commit('restoreDefaultShortcuts');
       ipcRenderer.send('restoreDefaultShortcuts');
+    },
+    async changeDownloadPath() {
+      const ipc = getIpcRenderer();
+      if (!ipc) return;
+      try {
+        const chosenPath = await ipc.invoke('select-download-dir');
+        if (chosenPath) {
+          this.$store.commit('updateSettings', {
+            key: 'downloadPath',
+            value: chosenPath,
+          });
+          this.showToast('下载目录已更新');
+        }
+      } catch (err) {
+        console.error('changeDownloadPath failed', err);
+      }
+    },
+    resetDownloadPath() {
+      this.$store.commit('updateSettings', {
+        key: 'downloadPath',
+        value: '',
+      });
+      this.showToast('已恢复为默认下载目录');
+    },
+    openDownloadPath() {
+      const ipc = getIpcRenderer();
+      if (!ipc) return;
+      ipc.invoke(
+        'open-download-dir',
+        this.settings.downloadPath || this.defaultDownloadDir
+      );
     },
   },
 };

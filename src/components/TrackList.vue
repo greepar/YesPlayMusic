@@ -3,12 +3,14 @@
     <ContextMenu ref="menu">
       <div v-show="type !== 'cloudDisk'" class="item-info">
         <img
-          v-virtual-image:224="rightClickedTrackComputed.al.picUrl"
-          loading="lazy"
+          v-if="menuCoverUrl"
+          :src="menuCoverUrl"
+          loading="eager"
+          decoding="sync"
         />
         <div class="info">
           <div class="title">{{ rightClickedTrackComputed.name }}</div>
-          <div class="subtitle">{{ rightClickedTrackComputed.ar[0].name }}</div>
+          <div class="subtitle">{{ rightClickedTrackArtistName }}</div>
         </div>
       </div>
       <hr v-show="type !== 'cloudDisk'" />
@@ -52,11 +54,20 @@
       <div v-show="type !== 'cloudDisk'" class="item" @click="copyLink">{{
         $t('contextMenu.copyUrl')
       }}</div>
+      <div v-show="type !== 'cloudDisk'" class="item" @click="downloadSong">{{
+        $t('contextMenu.download')
+      }}</div>
       <div
         v-if="extraContextMenuItem.includes('removeTrackFromCloudDisk')"
         class="item"
         @click="removeTrackFromCloudDisk"
         >从云盘中删除</div
+      >
+      <div
+        v-if="type === 'downloads'"
+        class="item"
+        @click="deleteDownloadedTrack"
+        >{{ $t('download.deleteFile') }}</div
       >
     </ContextMenu>
 
@@ -85,6 +96,7 @@ import { isAccountLoggedIn } from '@/utils/auth';
 import TrackListItem from '@/components/TrackListItem.vue';
 import ContextMenu from '@/components/ContextMenu.vue';
 import locale from '@/locale';
+import { downloadTrack, removeDownloadedTrack } from '@/utils/download';
 
 export default {
   name: 'TrackList',
@@ -160,7 +172,7 @@ export default {
     };
   },
   computed: {
-    ...mapState(['liked', 'player']),
+    ...mapState(['liked', 'player', 'settings']),
     isRightClickedTrackLiked() {
       return this.liked.songs.includes(this.rightClickedTrack?.id);
     },
@@ -173,6 +185,21 @@ export default {
             al: { picUrl: '' },
           }
         : this.rightClickedTrack;
+    },
+    menuCoverUrl() {
+      const picUrl =
+        this.rightClickedTrackComputed?.al?.picUrl ||
+        this.rightClickedTrackComputed?.album?.picUrl ||
+        '';
+      if (!picUrl) return '';
+      return picUrl.includes('?') ? picUrl : `${picUrl}?param=224y224`;
+    },
+    rightClickedTrackArtistName() {
+      return (
+        this.rightClickedTrackComputed?.ar?.[0]?.name ||
+        this.rightClickedTrackComputed?.artists?.[0]?.name ||
+        ''
+      );
     },
     virtualized() {
       // A 200-track page used to miss virtualization because the threshold was
@@ -307,6 +334,9 @@ export default {
       } else if (this.dbclickTrackFunc === 'playCloudDisk') {
         let trackIDs = this.tracks.map(t => t.id || t.songId);
         this.player.replacePlaylist(trackIDs, this.id, 'cloudDisk', trackID);
+      } else if (this.dbclickTrackFunc === 'playDownloads') {
+        let trackIDs = this.tracks.map(t => t.id || t.songId);
+        this.player.replacePlaylist(trackIDs, this.id, 'downloads', trackID);
       }
     },
     playThisListDefault(trackID) {
@@ -314,9 +344,14 @@ export default {
         this.player.playPlaylistByID(this.id, trackID);
       } else if (this.type === 'album') {
         this.player.playAlbumByID(this.id, trackID);
-      } else if (this.type === 'tracklist') {
+      } else if (this.type === 'tracklist' || this.type === 'downloads') {
         let trackIDs = this.tracks.map(t => t.id);
-        this.player.replacePlaylist(trackIDs, this.id, 'artist', trackID);
+        this.player.replacePlaylist(
+          trackIDs,
+          this.id,
+          this.type === 'downloads' ? 'downloads' : 'artist',
+          trackID
+        );
       }
     },
     play() {
@@ -349,21 +384,26 @@ export default {
         this.showToast(locale.t('toast.needToLogin'));
         return;
       }
-      if (confirm(`确定要从歌单删除 ${this.rightClickedTrack.name}？`)) {
-        let trackID = this.rightClickedTrack.id;
-        addOrRemoveTrackFromPlaylist({
-          op: 'del',
-          pid: this.id,
-          tracks: trackID,
-        }).then(data => {
-          this.showToast(
-            data.body.code === 200
-              ? locale.t('toast.removedFromPlaylist')
-              : data.body.message
-          );
-          this.$parent.removeTrack(trackID);
-        });
-      }
+      const track = this.rightClickedTrack;
+      this.$refs.menu?.closeMenu();
+      if (!track || !track.id) return;
+      setTimeout(() => {
+        if (confirm(`确定要从歌单删除 ${track.name}？`)) {
+          let trackID = track.id;
+          addOrRemoveTrackFromPlaylist({
+            op: 'del',
+            pid: this.id,
+            tracks: trackID,
+          }).then(data => {
+            this.showToast(
+              data.body.code === 200
+                ? locale.t('toast.removedFromPlaylist')
+                : data.body.message
+            );
+            this.$parent.removeTrack(trackID);
+          });
+        }
+      }, 20);
     },
     copyLink() {
       this.$copyText(
@@ -376,27 +416,62 @@ export default {
           this.showToast(`${locale.t('toast.copyFailed')}${err}`);
         });
     },
+    downloadSong() {
+      const track = this.rightClickedTrack;
+      if (!track || !track.id) return;
+      if (this.settings.askBeforeDownload === false) {
+        const quality = this.settings.downloadQuality || 320000;
+        downloadTrack(track, quality);
+      } else {
+        this.updateModal({
+          modalName: 'downloadTrackModal',
+          key: 'selectedTrack',
+          value: track,
+        });
+        this.updateModal({
+          modalName: 'downloadTrackModal',
+          key: 'show',
+          value: true,
+        });
+      }
+    },
     removeTrackFromQueue() {
       this.$store.state.player.removeTrackFromQueue(
         this.rightClickedTrackIndex
       );
     },
     removeTrackFromCloudDisk() {
-      if (confirm(`确定要从云盘删除 ${this.rightClickedTrack.songName}？`)) {
-        let trackID = this.rightClickedTrack.songId;
-        cloudDiskTrackDelete(trackID).then(data => {
-          this.showToast(
-            data.code === 200 ? '已将此歌曲从云盘删除' : data.message
-          );
-          let newCloudDisk = this.liked.cloudDisk.filter(
-            t => t.songId !== trackID
-          );
-          this.$store.commit('updateLikedXXX', {
-            name: 'cloudDisk',
-            data: newCloudDisk,
+      const track = this.rightClickedTrack;
+      this.$refs.menu?.closeMenu();
+      if (!track) return;
+      setTimeout(() => {
+        if (confirm(`确定要从云盘删除 ${track.songName}？`)) {
+          let trackID = track.songId;
+          cloudDiskTrackDelete(trackID).then(data => {
+            this.showToast(
+              data.code === 200 ? '已将此歌曲从云盘删除' : data.message
+            );
+            let newCloudDisk = this.liked.cloudDisk.filter(
+              t => t.songId !== trackID
+            );
+            this.$store.commit('updateLikedXXX', {
+              name: 'cloudDisk',
+              data: newCloudDisk,
+            });
           });
-        });
-      }
+        }
+      }, 20);
+    },
+    deleteDownloadedTrack() {
+      const track = this.rightClickedTrack;
+      this.$refs.menu?.closeMenu();
+      if (!track) return;
+      setTimeout(async () => {
+        if (confirm(`确定要从本地删除 ${track.name} 吗？`)) {
+          const removed = await removeDownloadedTrack(track);
+          this.showToast(removed ? '已从本地删除' : '删除本地文件失败');
+        }
+      }, 20);
     },
   },
 };

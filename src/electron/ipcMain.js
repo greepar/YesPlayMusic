@@ -1,10 +1,15 @@
-import { app, dialog, globalShortcut, ipcMain } from 'electron';
+import { app, dialog, globalShortcut, ipcMain, shell } from 'electron';
+import fs from 'fs';
+import path from 'path';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { registerGlobalShortcut } from '@/electron/globalShortcut';
 import cloneDeep from 'lodash/cloneDeep';
 import shortcuts from '@/utils/shortcuts';
 import { createMenu } from './menu';
 import { isCreateTray, isMac } from '@/utils/platform';
 import { isPlayerCommand } from '@/player/protocol';
+import { injectMetadata } from './metadata';
 
 let latestPlayerSnapshot = null;
 export const getLatestPlayerSnapshot = () => latestPlayerSnapshot;
@@ -304,6 +309,190 @@ export function initIpcMain(
     globalShortcut.unregisterAll();
     registerGlobalShortcut(win, store, audioWindow);
   });
+
+  ipcMain.handle('get-default-download-dir', () => {
+    return path.join(app.getPath('downloads'), 'YesPlayMusic');
+  });
+
+  ipcMain.handle('select-download-dir', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        properties: ['openDirectory', 'createDirectory'],
+      });
+      if (!result.canceled && result.filePaths.length > 0) {
+        return result.filePaths[0];
+      }
+      return null;
+    } catch (err) {
+      log(`select-download-dir error: ${err.message}`);
+      return null;
+    }
+  });
+
+  ipcMain.handle('open-download-dir', async (event, dir) => {
+    try {
+      const targetDir =
+        dir && dir.trim() !== ''
+          ? dir
+          : path.join(app.getPath('downloads'), 'YesPlayMusic');
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      await shell.openPath(targetDir);
+      return true;
+    } catch (err) {
+      log(`open-download-dir error: ${err.message}`);
+      return false;
+    }
+  });
+
+  ipcMain.handle('show-item-in-folder', async (event, filePath) => {
+    if (filePath && fs.existsSync(filePath)) {
+      shell.showItemInFolder(filePath);
+      return true;
+    }
+    return false;
+  });
+
+  ipcMain.handle('delete-local-file', async (event, filePath) => {
+    if (!filePath) return false;
+    try {
+      await fs.promises.unlink(filePath);
+      return true;
+    } catch (err) {
+      if (err.code === 'ENOENT') return true;
+      log(`Delete local file failed: ${err.message}`);
+      return false;
+    }
+  });
+
+  ipcMain.handle('local-file-exists', (event, filePath) => {
+    if (!filePath) return false;
+    try {
+      return fs.statSync(filePath).isFile();
+    } catch (_) {
+      return false;
+    }
+  });
+
+  ipcMain.handle(
+    'download-track',
+    async (event, { id, url, filename, targetDir, metadata }) => {
+      let tmpPath = '';
+      try {
+        const defaultDownloadDir = path.join(
+          app.getPath('downloads'),
+          'YesPlayMusic'
+        );
+        const downloadFolder =
+          targetDir && targetDir.trim() !== ''
+            ? targetDir
+            : defaultDownloadDir;
+
+        if (!fs.existsSync(downloadFolder)) {
+          fs.mkdirSync(downloadFolder, { recursive: true });
+        }
+
+        const extMatch = filename.match(/\.([^.]+)$/);
+        const ext = extMatch ? extMatch[1] : 'mp3';
+        const rawName = filename.replace(/\.[^.]+$/, '');
+        const cleanBase = rawName.replace(/[/\\?%*:|"<>]/g, '_').trim();
+
+        let destPath = path.join(downloadFolder, `${cleanBase}.${ext}`);
+        let counter = 1;
+        while (fs.existsSync(destPath)) {
+          destPath = path.join(
+            downloadFolder,
+            `${cleanBase} (${counter}).${ext}`
+          );
+          counter++;
+        }
+
+        tmpPath = `${destPath}.downloading`;
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        }
+        const contentType = response.headers.get('content-type') || '';
+        if (/text\/html|application\/json/i.test(contentType)) {
+          throw new Error(`Unexpected download content type: ${contentType}`);
+        }
+
+        const contentLength = parseInt(
+          response.headers.get('content-length') || '0',
+          10
+        );
+        let downloadedBytes = 0;
+        let lastReportTime = 0;
+
+        if (!response.body) throw new Error('Download response has no body');
+        await pipeline(
+          Readable.fromWeb(response.body),
+          async function* (source) {
+            for await (const chunk of source) {
+              downloadedBytes += chunk.length;
+              const now = Date.now();
+              if (now - lastReportTime > 200 || downloadedBytes === contentLength) {
+                lastReportTime = now;
+                win.webContents.send('download-progress', {
+                  id,
+                  downloadedBytes,
+                  totalBytes: contentLength,
+                  progress: contentLength > 0
+                    ? Math.round((downloadedBytes / contentLength) * 100)
+                    : 0,
+                });
+              }
+              yield chunk;
+            }
+          },
+          fs.createWriteStream(tmpPath)
+        );
+        if (contentLength > 0 && downloadedBytes !== contentLength) {
+          throw new Error('Incomplete download');
+        }
+
+        if (fs.existsSync(destPath)) {
+          fs.unlinkSync(destPath);
+        }
+        fs.renameSync(tmpPath, destPath);
+
+        // 注入音频元数据 (ID3 / FLAC Vorbis Comments + 封面)
+        if (metadata) {
+          try {
+            await injectMetadata(destPath, metadata);
+          } catch (metaErr) {
+            log(`Inject metadata failed: ${metaErr.message}`);
+          }
+        }
+
+        const stats = fs.statSync(destPath);
+        return {
+          ok: true,
+          filePath: destPath,
+          filename: path.basename(destPath),
+          size: stats.size,
+        };
+      } catch (err) {
+        if (tmpPath && fs.existsSync(tmpPath)) {
+          try {
+            fs.unlinkSync(tmpPath);
+          } catch (_) {}
+        }
+        log(`Download track failed: ${err.message}`);
+        return {
+          ok: false,
+          error: err.message,
+        };
+      }
+    }
+  );
 
   if (isCreateTray) {
     ipcMain.on('updateTrayTooltip', (_, title) => {

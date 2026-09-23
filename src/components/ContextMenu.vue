@@ -1,21 +1,25 @@
 <template>
   <div ref="contextMenu" class="context-menu">
-    <div
-      v-if="showMenu"
-      ref="menu"
-      class="menu"
-      tabindex="-1"
-      :style="{ top: top, left: left }"
-      @blur="closeMenu"
-      @click="closeMenu"
-    >
-      <slot></slot>
-    </div>
+    <transition name="context-menu">
+      <div
+        v-if="showMenu"
+        ref="menu"
+        class="menu"
+        tabindex="-1"
+        :style="{ top: top, left: left }"
+        @click="handleMenuClick"
+      >
+        <slot></slot>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script>
 import { mapState } from 'vuex';
+
+// 全局单例记录当前打开的 ContextMenu 组件实例，杜绝多菜单并存
+let activeContextMenu = null;
 
 export default {
   name: 'ContextMenu',
@@ -29,6 +33,9 @@ export default {
   computed: {
     ...mapState(['player']),
   },
+  beforeUnmount() {
+    this.unbindGlobalEvents();
+  },
   methods: {
     setMenu(top, left) {
       let heightOffset = this.player.enabled ? 64 : 0;
@@ -41,22 +48,77 @@ export default {
       this.left = left + 'px';
     },
 
+    bindGlobalEvents() {
+      window.addEventListener('pointerdown', this.handleOutsidePointer, true);
+      window.addEventListener('contextmenu', this.handleOutsidePointer, true);
+      window.addEventListener('wheel', this.handleOutsideWheel, {
+        passive: true,
+      });
+      window.addEventListener('blur', this.closeMenu);
+    },
+
+    unbindGlobalEvents() {
+      window.removeEventListener('pointerdown', this.handleOutsidePointer, true);
+      window.removeEventListener('contextmenu', this.handleOutsidePointer, true);
+      window.removeEventListener('wheel', this.handleOutsideWheel);
+      window.removeEventListener('blur', this.closeMenu);
+    },
+
     closeMenu() {
+      if (!this.showMenu) return;
       this.showMenu = false;
+      this.unbindGlobalEvents();
+      if (activeContextMenu === this) {
+        activeContextMenu = null;
+      }
       if (this.$parent.closeMenu !== undefined) {
         this.$parent.closeMenu();
       }
       this.$store.commit('enableScrolling', true);
     },
 
+    handleMenuClick(e) {
+      // 点击菜单动作项时自动关闭（排除 header 预览）
+      if (e.target.closest('.item:not(.header)')) {
+        this.closeMenu();
+      }
+    },
+
+    handleOutsidePointer(e) {
+      if (this.$refs.menu && !this.$refs.menu.contains(e.target)) {
+        this.closeMenu();
+      }
+    },
+
+    handleOutsideWheel(e) {
+      if (this.$refs.menu && !this.$refs.menu.contains(e.target)) {
+        this.closeMenu();
+      }
+    },
+
     openMenu(e) {
+      // 全局互斥：关闭任何先前已打开的菜单
+      if (activeContextMenu && activeContextMenu !== this) {
+        activeContextMenu.closeMenu();
+      }
+      activeContextMenu = this;
+
+      // 预设光标坐标，防止初次或再次打开时从旧位置跳跃产生位移闪烁
+      this.top = e.y + 'px';
+      this.left = e.x + 'px';
       this.showMenu = true;
-      this.$nextTick(
-        function () {
+
+      this.$nextTick(() => {
+        if (this.$refs.menu) {
           this.$refs.menu.focus();
           this.setMenu(e.y, e.x);
-        }.bind(this)
-      );
+          setTimeout(() => {
+            if (this.showMenu) {
+              this.bindGlobalEvents();
+            }
+          }, 0);
+        }
+      });
       e.preventDefault();
       this.$store.commit('enableScrolling', false);
     },
@@ -80,20 +142,53 @@ selectors must remain global to style the slot content. -->
   max-width: 240px;
   list-style: none;
   background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 6px 12px -4px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.12),
+    0 2px 8px -2px rgba(0, 0, 0, 0.06);
   border: 1px solid rgba(0, 0, 0, 0.06);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
   border-radius: 12px;
   box-sizing: border-box;
   padding: 6px;
   z-index: 1000;
   -webkit-app-region: no-drag;
-  transition: background 125ms ease-out, opacity 125ms ease-out,
-    transform 125ms ease-out;
+  transform-origin: top left;
+  transition: background 150ms ease-out;
 
   &:focus {
     outline: none;
   }
+}
+
+/* ContextMenu 缓动微弹弹出与优雅渐隐消失 */
+.context-menu-enter-active {
+  transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.16s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.context-menu-leave-active {
+  transition: opacity 0.12s cubic-bezier(0.4, 0, 1, 1),
+    transform 0.12s cubic-bezier(0.4, 0, 1, 1) !important;
+  pointer-events: none;
+}
+
+.context-menu-enter-from {
+  opacity: 0 !important;
+  transform: scale(0.92) translateY(-4px) !important;
+}
+
+.context-menu-enter-to {
+  opacity: 1 !important;
+  transform: scale(1) translateY(0) !important;
+}
+
+.context-menu-leave-from {
+  opacity: 1 !important;
+  transform: scale(1) translateY(0) !important;
+}
+
+.context-menu-leave-to {
+  opacity: 0 !important;
+  transform: scale(0.96) translateY(-2px) !important;
 }
 
 [data-theme='dark'] {

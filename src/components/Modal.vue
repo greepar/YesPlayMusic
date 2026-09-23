@@ -1,20 +1,22 @@
 <template>
-  <div v-show="show" class="shade" @click="clickOutside">
-    <div class="modal" :style="modalStyles" @click.stop>
-      <div class="header">
-        <div class="title">{{ title }}</div>
-        <button class="close" @click="close"
-          ><svg-icon icon-class="x"
-        /></button>
-      </div>
-      <div class="content"><slot></slot></div>
-      <div v-if="showFooter" class="footer">
-        <!-- <button>取消</button>
-        <button class="primary">确定</button> -->
-        <slot name="footer"></slot>
+  <transition name="modal-fade">
+    <div v-show="show" class="shade" @click="clickOutside">
+      <div class="modal" :style="modalStyles" @click.stop>
+        <div class="header">
+          <div class="title">{{ title }}</div>
+          <button class="close" @click="close"
+            ><svg-icon icon-class="x"
+          /></button>
+        </div>
+        <div class="content"><slot></slot></div>
+        <div v-if="showFooter" class="footer">
+          <!-- <button>取消</button>
+          <button class="primary">确定</button> -->
+          <slot name="footer"></slot>
+        </div>
       </div>
     </div>
-  </div>
+  </transition>
 </template>
 
 <script>
@@ -90,6 +92,8 @@ export default {
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 128px - 64px);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 
   ::-webkit-scrollbar {
     width: 4px;
@@ -153,26 +157,45 @@ export default {
   display: flex;
   justify-content: flex-end;
   margin-bottom: -8px;
-  button {
+
+  :deep(button) {
     color: var(--color-text);
     background: var(--color-secondary-bg-for-transparent);
     border-radius: 8px;
-    padding: 6px 16px;
+    padding: 8px 20px;
     font-size: 14px;
+    font-weight: 500;
     margin-left: 12px;
-    transition: 0.2s;
+    transition: all 0.2s ease;
+    border: none;
+    outline: none;
+    cursor: pointer;
+
+    &:hover {
+      opacity: 0.9;
+      transform: scale(1.02);
+    }
+
     &:active {
-      transform: scale(0.94);
+      transform: scale(0.95);
     }
   }
+
   :deep(button.primary) {
-    color: var(--color-primary-bg);
-    background: var(--color-primary-gradient);
-    font-weight: 500;
+    color: #ffffff !important;
+    background: var(--color-primary-gradient) !important;
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(51, 94, 234, 0.35);
+
+    &:hover {
+      box-shadow: 0 6px 16px rgba(51, 94, 234, 0.45);
+    }
   }
+
   :deep(button.block) {
     width: 100%;
     margin-left: 0;
+
     &:active {
       transform: scale(0.98);
     }
@@ -188,6 +211,37 @@ export default {
   .modal {
     background: rgba(36, 36, 36, 0.88);
     border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* Modal 缓动淡入与弹性弹出动画 */
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+
+  .modal {
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0 !important;
+
+  .modal {
+    opacity: 0 !important;
+    transform: scale(0.9) translateY(24px) !important;
+  }
+}
+
+.modal-fade-enter-to,
+.modal-fade-leave-from {
+  opacity: 1 !important;
+
+  .modal {
+    opacity: 1 !important;
+    transform: scale(1) translateY(0) !important;
   }
 }
 </style>

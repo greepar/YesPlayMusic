@@ -265,7 +265,7 @@ export default {
     if (this.artist?.id?.toString() !== this.$route.params.id) {
       this.loadData(this.$route.params.id);
     } else {
-      this.$root.$refs.scrollbar.restorePosition();
+      this.$root?.$refs?.scrollbar?.restorePosition?.();
     }
   },
   methods: {
@@ -276,7 +276,8 @@ export default {
         if (!this.show) NProgress.start();
       }, 1000);
       this.show = false;
-      this.$parent.$refs.main.scrollTo({ top: 0 });
+      const main = document.querySelector('main');
+      if (main) main.scrollTo({ top: 0 });
       getArtist(id).then(data => {
         this.artist = data.artist;
         this.setPopularTracks(data.hotSongs);

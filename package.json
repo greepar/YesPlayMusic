@@ -1,6 +1,6 @@
 {
   "name": "yesplaymusic",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "private": true,
   "description": "A third party music player for Netease Music",
   "author": "qier222<qier222@outlook.com>",
@@ -52,8 +52,10 @@
     "jsbi": "^4.3.2",
     "lodash": "^4.18.1",
     "md5": "^2.3.0",
+    "metaflac-js2": "^1.0.8",
     "mpris-service": "^2.1.2",
     "music-metadata": "^11.15.0",
+    "node-id3": "^0.2.9",
     "node-vibrant": "^4.0.4",
     "nprogress": "^0.2.0",
     "pac-proxy-agent": "^9.1.0",

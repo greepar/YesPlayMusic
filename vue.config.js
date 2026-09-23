@@ -58,12 +58,11 @@ module.exports = {
         fallback: { fs: false, path: false, child_process: false },
       },
     });
-    if (!process.env.IS_ELECTRON) {
-      // 网页版里 `process.platform` 之类的用法需要一个浏览器端的 process
-      config
-        .plugin('provide-process')
-        .use(webpack.ProvidePlugin, [{ process: 'process/browser' }]);
-    }
+    // Electron 20+ does not expose Node's process in sandboxed renderers.
+    // Provide the browser shim for dependencies expecting process.
+    config
+      .plugin('provide-process')
+      .use(webpack.ProvidePlugin, [{ process: 'process/browser' }]);
 
     config.module.rule('svg').exclude.add(resolve('src/assets/icons')).end();
     config.module
@@ -124,6 +123,7 @@ module.exports = {
       customFileProtocol: './',
       // 安装了 TypeScript 插件后，插件默认会去找 src/background.ts，这里显式指定
       mainProcessFile: 'src/background.js',
+      preload: 'src/preload.js',
       builderOptions: {
         productName: 'YesPlayMusic',
         copyright: 'Copyright © YesPlayMusic',

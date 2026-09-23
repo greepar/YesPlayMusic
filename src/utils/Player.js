@@ -6,7 +6,14 @@ import { getLyric, getMP3, getTrackDetail, scrobble } from '@/api/track';
 import store from '@/store';
 import { isAccountLoggedIn } from '@/utils/auth';
 import { cacheTrackSource, getTrackSource } from '@/utils/db';
-import { isCreateMpris, isCreateTray } from '@/utils/platform';
+import { getDownloadedTrack, getExistingLocalTrackPath } from '@/utils/download';
+import {
+  isCreateMpris,
+  isCreateTray,
+  isElectron,
+  getElectron,
+  getIpcRenderer,
+} from '@/utils/platform';
 import { Howl, Howler } from 'howler';
 import shuffle from 'lodash/shuffle';
 
@@ -23,10 +30,8 @@ const UNPLAYABLE_CONDITION = {
   PLAY_PREV_TRACK: 'playPrevTrack',
 };
 
-const electron =
-  process.env.IS_ELECTRON === true ? window.require('electron') : null;
-const ipcRenderer =
-  process.env.IS_ELECTRON === true ? electron.ipcRenderer : null;
+const electron = getElectron();
+const ipcRenderer = getIpcRenderer();
 const delay = ms =>
   new Promise(resolve => {
     setTimeout(() => {
@@ -440,7 +445,8 @@ export default class {
       !store.state.settings.automaticallyCacheSongs ||
       !track?.id ||
       typeof source !== 'string' ||
-      source.startsWith('blob:')
+      source.startsWith('blob:') ||
+      source.startsWith('file:')
     )
       return;
     clearTimeout(this._cacheTimer);
@@ -505,7 +511,19 @@ export default class {
       });
     }
   }
-  _getAudioSource(track) {
+  async _getAudioSource(track) {
+    if (isElectron) {
+      const localPath = await getExistingLocalTrackPath(track.id);
+      if (localPath) {
+        const normalized = localPath.replace(/\\/g, '/');
+        const absolute = normalized.startsWith('/')
+          ? normalized
+          : `/${normalized}`;
+        return `file://${encodeURI(absolute).replace(/[?#]/g, c =>
+          encodeURIComponent(c)
+        )}`;
+      }
+    }
     return this._getAudioSourceFromCache(String(track.id)).then(source => {
       return source ?? this._getAudioSourceFromNetease(track);
     });
@@ -530,23 +548,41 @@ export default class {
     this._pendingSeek = null;
     this._audioRecoveryAttempts = 0;
     this._loading = true;
-    this._currentTrack = { id, name: '', ar: [{ name: '' }], al: {}, dt: 0 };
-    return getTrackDetail(id).then(data => {
-      if (generation !== this._loadGeneration) return false;
-      const track = data.songs[0];
-      this._currentTrack = track;
-      setTitle(track);
-      this._updateMediaSessionMetaData(track);
-      return this._replaceCurrentTrackAudio(
-        track,
-        autoplay,
-        true,
-        ifUnplayableThen
-      );
-    }).catch(error => {
-      if (generation === this._loadGeneration) this._loading = false;
-      throw error;
-    });
+    const downloadedTrack = getDownloadedTrack(id);
+    if (downloadedTrack && downloadedTrack.name) {
+      this._currentTrack = downloadedTrack;
+    } else if (!this._currentTrack || this._currentTrack.id !== id) {
+      this._currentTrack = { id, name: '', ar: [{ name: '' }], al: {}, dt: 0 };
+    }
+    return getTrackDetail(id)
+      .then(data => data?.songs?.[0] || downloadedTrack)
+      .catch(async error => {
+        if (generation !== this._loadGeneration) return null;
+        if (downloadedTrack && (await getExistingLocalTrackPath(id))) {
+          return downloadedTrack;
+        }
+        throw error;
+      })
+      .then(track => {
+        if (generation !== this._loadGeneration) return false;
+        if (!track) {
+          this._loading = false;
+          return false;
+        }
+        this._currentTrack = track;
+        setTitle(track);
+        this._updateMediaSessionMetaData(track);
+        return this._replaceCurrentTrackAudio(
+          track,
+          autoplay,
+          true,
+          ifUnplayableThen
+        );
+      })
+      .catch(error => {
+        if (generation === this._loadGeneration) this._loading = false;
+        throw error;
+      });
   }
   /**
    * @returns 是否成功加载音频，并使用加载完成的音频替换了howler实例
@@ -594,10 +630,21 @@ export default class {
       : this._getNextTrack()[0];
     if (!nextTrackID) return;
     if (this._personalFMTrack.id == nextTrackID) return;
-    getTrackDetail(nextTrackID).then(data => {
-      let track = data.songs[0];
-      this._getAudioSource(track);
-    });
+    const downloaded = getDownloadedTrack(nextTrackID);
+    const prefetch = () => getTrackDetail(nextTrackID)
+      .then(data => {
+        const track = data?.songs?.[0];
+        if (track) return this._getAudioSource(track);
+      })
+      .catch(() => {});
+    if (downloaded && isElectron) {
+      // A valid local file needs no network prefetch.
+      getExistingLocalTrackPath(nextTrackID).then(path => {
+        if (!path) prefetch();
+      });
+    } else {
+      prefetch();
+    }
   }
   _loadSelfFromLocalStorage() {
     const player = JSON.parse(localStorage.getItem('player'));
@@ -733,23 +780,25 @@ export default class {
   }
   _playDiscordPresence(track, seekTime = 0) {
     if (
-      process.env.IS_ELECTRON !== true ||
+      !isElectron ||
       store.state.settings.enableDiscordRichPresence === false
     ) {
       return null;
     }
     let copyTrack = { ...track };
     copyTrack.dt -= seekTime * 1000;
-    ipcRenderer?.send('playDiscordPresence', copyTrack);
+    const ipc = getIpcRenderer();
+    ipc?.send('playDiscordPresence', copyTrack);
   }
   _pauseDiscordPresence(track) {
     if (
-      process.env.IS_ELECTRON !== true ||
+      !isElectron ||
       store.state.settings.enableDiscordRichPresence === false
     ) {
       return null;
     }
-    ipcRenderer?.send('pauseDiscordPresence', track);
+    const ipc = getIpcRenderer();
+    ipc?.send('pauseDiscordPresence', track);
   }
   _playNextTrack(isPersonal) {
     if (isPersonal) {
@@ -1036,9 +1085,10 @@ export default class {
   }
 
   sendSelfToIpcMain() {
-    if (process.env.IS_ELECTRON !== true) return false;
+    if (!isElectron) return false;
     let liked = store.state.liked.songs.includes(this.currentTrack.id);
-    ipcRenderer?.send('player', {
+    const ipc = getIpcRenderer();
+    ipc?.send('player', {
       playing: this.playing,
       likedCurrentTrack: liked,
     });

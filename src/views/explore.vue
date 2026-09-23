@@ -112,7 +112,7 @@ export default {
   },
   activated() {
     this.loadData();
-    this.$root.$refs.scrollbar.restorePosition();
+    this.$root?.$refs?.scrollbar?.restorePosition?.();
   },
   methods: {
     ...mapMutations(['togglePlaylistCategory']),

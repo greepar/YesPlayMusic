@@ -213,7 +213,11 @@ export default {
       return true;
     },
     showLikeButton() {
-      return this.type !== 'tracklist' && this.type !== 'cloudDisk';
+      return (
+        this.type !== 'tracklist' &&
+        this.type !== 'cloudDisk' &&
+        this.type !== 'downloads'
+      );
     },
     showOrderNumber() {
       return this.type === 'album';

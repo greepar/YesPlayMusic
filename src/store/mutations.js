@@ -42,6 +42,9 @@ export default {
     state.toast = toast;
   },
   updateModal(state, { modalName, key, value }) {
+    if (!state.modals[modalName]) {
+      state.modals[modalName] = {};
+    }
     state.modals[modalName][key] = value;
     if (key === 'show') {
       // 100ms的延迟是为等待右键菜单blur之后再disableScrolling

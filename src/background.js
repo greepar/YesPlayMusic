@@ -1,4 +1,5 @@
 'use strict';
+import path from 'path';
 import {
   app,
   protocol,
@@ -8,6 +9,7 @@ import {
   globalShortcut,
   nativeTheme,
   screen,
+  session,
   powerMonitor,
 } from 'electron';
 import {
@@ -261,6 +263,7 @@ class Background {
         nodeIntegration: true,
         enableRemoteModule: true,
         contextIsolation: false,
+        preload: path.join(__dirname, 'preload.js'),
       },
       backgroundColor:
         ((appearance === undefined || appearance === 'auto') &&
@@ -556,6 +559,12 @@ class Background {
       if (isDevelopment) {
         this.initDevtools();
       }
+
+      // Old web builds may have registered a service worker for this localhost
+      // origin. It can serve stale HTML/JS to the desktop app after an update.
+      await session.defaultSession.clearStorageData({
+        storages: ['serviceworkers', 'cachestorage'],
+      });
 
       // The hidden renderer owns Howler and remains alive when the UI is hidden.
       this.createAudioWindow();

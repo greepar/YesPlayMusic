@@ -91,6 +91,13 @@
           </div>
           <div
             class="tab"
+            :class="{ active: currentTab === 'downloads' }"
+            @click="updateCurrentTab('downloads')"
+          >
+            {{ $t('library.downloads') }}
+          </div>
+          <div
+            class="tab"
             :class="{ active: currentTab === 'playHistory' }"
             @click="updateCurrentTab('playHistory')"
           >
@@ -152,6 +159,10 @@
           dbclick-track-func="playCloudDisk"
           :extra-context-menu-item="['removeTrackFromCloudDisk']"
         />
+      </div>
+
+      <div v-if="isTabActive('downloads')">
+        <DownloadTab />
       </div>
 
       <div v-if="isTabActive('playHistory')">
@@ -227,6 +238,7 @@ import TrackList from '@/components/TrackList.vue';
 import CoverRow from '@/components/CoverRow.vue';
 import SvgIcon from '@/components/SvgIcon.vue';
 import MvRow from '@/components/MvRow.vue';
+import DownloadTab from '@/components/DownloadTab.vue';
 import { isActiveView } from '@/utils/viewPerformance';
 
 /**
@@ -241,7 +253,7 @@ function extractLyricPart(rawLyric) {
 
 export default {
   name: 'Library',
-  components: { SvgIcon, CoverRow, TrackList, MvRow, ContextMenu },
+  components: { SvgIcon, CoverRow, TrackList, MvRow, ContextMenu, DownloadTab },
   data() {
     return {
       show: false,
@@ -311,7 +323,7 @@ export default {
     this.loadData();
   },
   activated() {
-    this.$root.$refs.scrollbar.restorePosition();
+    this.$root?.$refs?.scrollbar?.restorePosition?.();
     this.loadData();
     dailyTask();
   },
@@ -355,13 +367,12 @@ export default {
       );
     },
     updateCurrentTab(tab) {
-      if (!isAccountLoggedIn() && tab !== 'playlists') {
+      if (!isAccountLoggedIn() && tab !== 'playlists' && tab !== 'downloads') {
         this.showToast(locale.t('toast.needToLogin'));
         return;
       }
       this.currentTab = tab;
       this.loadTabData(tab);
-      this.$parent.$refs.main.scrollTo({ top: 375, behavior: 'smooth' });
     },
     loadTabData(tab) {
       const action = {

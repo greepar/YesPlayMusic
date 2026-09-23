@@ -32,6 +32,90 @@ export function getMP3(id) {
 }
 
 /**
+ * 获取歌曲下载链接及格式
+ * 优先调用 enhanced download 接口，若无链接则平滑回退到普通播放及直链
+ * @param {string|number} id
+ * @param {string|number} quality
+ */
+export function getTrackDownloadURL(id, quality) {
+  const getBr = () => {
+    if (quality === 'flac') return 350000;
+    if (quality === '999000') return 999000;
+    return parseInt(quality || 320000);
+  };
+  const br = getBr();
+
+  return request({
+    url: '/song/download/url',
+    method: 'get',
+    params: {
+      id,
+      br,
+    },
+  })
+    .then(res => {
+      if (res?.data?.url) {
+        return {
+          url: res.data.url,
+          type: res.data.type || 'mp3',
+          br: res.data.br,
+          size: res.data.size,
+        };
+      }
+      return request({
+        url: '/song/url',
+        method: 'get',
+        params: {
+          id,
+          br,
+        },
+      }).then(res2 => {
+        const item = res2?.data?.[0];
+        if (item?.url) {
+          return {
+            url: item.url,
+            type: item.type || 'mp3',
+            br: item.br,
+            size: item.size,
+          };
+        }
+        return {
+          url: `https://music.163.com/song/media/outer/url?id=${id}.mp3`,
+          type: 'mp3',
+          br: 128000,
+          size: 0,
+        };
+      });
+    })
+    .catch(() => {
+      return request({
+        url: '/song/url',
+        method: 'get',
+        params: {
+          id,
+          br,
+        },
+      }).then(res2 => {
+        const item = res2?.data?.[0];
+        if (item?.url) {
+          return {
+            url: item.url,
+            type: item.type || 'mp3',
+            br: item.br,
+            size: item.size,
+          };
+        }
+        return {
+          url: `https://music.163.com/song/media/outer/url?id=${id}.mp3`,
+          type: 'mp3',
+          br: 128000,
+          size: 0,
+        };
+      });
+    });
+}
+
+/**
  * 获取歌曲详情
  * 说明 : 调用此接口 , 传入音乐 id(支持多个 id, 用 , 隔开), 可获得歌曲详情(注意:歌曲封面现在需要通过专辑内容接口获取)
  * @param {string} ids - 音乐 id, 例如 ids=405998841,33894312
@@ -53,7 +137,9 @@ export function getTrackDetail(ids) {
       return data;
     });
   };
-  fetchLatest();
+  // Refresh the cache opportunistically; offline playback can use cached details
+  // without an unhandled rejection from this background request.
+  fetchLatest().catch(() => {});
 
   let idsInArray = [String(ids)];
   if (typeof ids === 'string') {

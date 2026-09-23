@@ -28,6 +28,7 @@
     <Toast />
     <ModalAddTrackToPlaylist v-if="isAccountLoggedIn" />
     <ModalNewPlaylist v-if="isAccountLoggedIn" />
+    <ModalDownloadTrack />
     <transition v-if="enablePlayer" name="slide-up">
       <Lyrics v-show="showLyrics" />
     </transition>
@@ -37,6 +38,7 @@
 <script>
 import ModalAddTrackToPlaylist from './components/ModalAddTrackToPlaylist.vue';
 import ModalNewPlaylist from './components/ModalNewPlaylist.vue';
+import ModalDownloadTrack from './components/ModalDownloadTrack.vue';
 import Scrollbar from './components/Scrollbar.vue';
 import Navbar from './components/Navbar.vue';
 import Player from './components/Player.vue';
@@ -46,6 +48,7 @@ import { isAccountLoggedIn, isLooseLoggedIn } from '@/utils/auth';
 import Lyrics from './views/lyrics.vue';
 import { mapState } from 'vuex';
 import { MAX_CACHED_VIEWS } from '@/utils/viewPerformance';
+import { isElectron } from '@/utils/platform';
 
 export default {
   name: 'App',
@@ -55,12 +58,13 @@ export default {
     Toast,
     ModalAddTrackToPlaylist,
     ModalNewPlaylist,
+    ModalDownloadTrack,
     Lyrics,
     Scrollbar,
   },
   data() {
     return {
-      isElectron: process.env.IS_ELECTRON, // true || undefined
+      isElectron,
       userSelectNone: false,
       maxCachedViews: MAX_CACHED_VIEWS,
     };

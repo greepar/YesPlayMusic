@@ -1,5 +1,6 @@
 import store from '@/store';
 import { setRenderingSuspended } from '@/utils/renderLifecycle';
+import { isMac, isLinux } from '@/utils/platform';
 
 const player = store.state.player;
 
@@ -9,7 +10,7 @@ export function ipcRenderer(vueInstance) {
   document.body.setAttribute('data-electron', 'yes');
   document.body.setAttribute(
     'data-electron-os',
-    window.require('os').platform()
+    isMac ? 'darwin' : isLinux ? 'linux' : 'win32'
   );
   // ipc message channel
   const electron = window.require('electron');
