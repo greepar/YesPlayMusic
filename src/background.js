@@ -440,7 +440,12 @@ class Background {
   checkForUpdates() {
     if (isDevelopment) return;
     log('checkForUpdates');
-    autoUpdater.checkForUpdatesAndNotify().catch(error => {
+    // Updates are installed by the user from the release page. Avoid
+    // downloading a full installer (and installing it on app quit) just to
+    // show the new-version prompt.
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
+    autoUpdater.checkForUpdates().catch(error => {
       // Unpacked development builds do not contain app-update.yml.
       log(`update check skipped: ${error.message}`);
     });
@@ -464,7 +469,7 @@ class Background {
         });
     };
 
-    autoUpdater.on('update-available', info => {
+    autoUpdater.once('update-available', info => {
       showNewVersionMessage(info);
     });
   }
