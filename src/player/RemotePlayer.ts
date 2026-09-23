@@ -185,6 +185,13 @@ export default class RemotePlayer {
     return this.state.personalFMTrack;
   }
   get isCurrentTrackLiked() {
+    try {
+      const store = (window as any)?.__store__;
+      const currentId = this.currentTrack?.id;
+      if (store?.state?.liked?.songs && currentId) {
+        return store.state.liked.songs.includes(currentId);
+      }
+    } catch (_) {}
     return this.state.isCurrentTrackLiked;
   }
   get loading() {

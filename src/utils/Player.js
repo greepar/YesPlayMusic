@@ -6,7 +6,10 @@ import { getLyric, getMP3, getTrackDetail, scrobble } from '@/api/track';
 import store from '@/store';
 import { isAccountLoggedIn } from '@/utils/auth';
 import { cacheTrackSource, getTrackSource } from '@/utils/db';
-import { getDownloadedTrack, getExistingLocalTrackPath } from '@/utils/download';
+import {
+  getDownloadedTrack,
+  getExistingLocalTrackPath,
+} from '@/utils/download';
 import {
   isCreateMpris,
   isCreateTray,
@@ -240,9 +243,13 @@ export default class {
 
     if (this._enabled) {
       // 恢复当前播放歌曲
-      this._replaceCurrentTrack(this.currentTrackID, false).then(() => {
-        this._howler?.seek(localStorage.getItem('playerCurrentTrackTime') ?? 0);
-      }); // update audio source and init howler
+      setTimeout(() => {
+        this._replaceCurrentTrack(this.currentTrackID, false).then(() => {
+          this._howler?.seek(
+            localStorage.getItem('playerCurrentTrackTime') ?? 0
+          );
+        });
+      }, 0);
       this._initMediaSession();
     }
 
@@ -326,16 +333,18 @@ export default class {
     if (firstTrackID !== 'first') this._shuffledList.unshift(firstTrackID);
   }
   async _scrobble(track, time, completed = false) {
+    if (!track?.id) return;
+    const artistName = track.ar?.[0]?.name || track.artists?.[0]?.name || '';
     console.debug(
-      `[debug][Player.js] scrobble track 👉 ${track.name} by ${track.ar[0].name} 👉 time:${time} completed: ${completed}`
+      `[debug][Player.js] scrobble track 👉 ${track.name} by ${artistName} 👉 time:${time} completed: ${completed}`
     );
     const trackDuration = ~~(track.dt / 1000);
     time = completed ? trackDuration : ~~time;
     scrobble({
       id: track.id,
-      sourceid: this.playlistSource.id,
+      sourceid: this.playlistSource?.id || 0,
       time,
-    });
+    }).catch(() => {});
   }
   _playAudioSource(source, autoplay = true, track = this.currentTrack) {
     const requested = autoplay || this._playRequested;
@@ -349,7 +358,7 @@ export default class {
       src: [source],
       html5: true,
       preload: true,
-      format: [source === this._cloudWav ? 'wav' : 'mp3'],
+      ...(source === this._cloudWav ? { format: ['wav'] } : {}),
       onend: () => {
         this._nextTrackCallback();
       },
@@ -366,8 +375,7 @@ export default class {
     const sound = this._howler?._sounds?.[0];
     const media = sound?._node;
     if (media) {
-      const isCurrentMedia = () =>
-        this._howler?._sounds?.[0]?._node === media;
+      const isCurrentMedia = () => this._howler?._sounds?.[0]?._node === media;
       const applyPendingSeek = () => {
         if (!isCurrentMedia() || this._pendingSeek === null) return;
         const target = this._pendingSeek;
@@ -410,6 +418,7 @@ export default class {
         this._playRequested = false;
         this._setPlaying(false);
         store.dispatch('showToast', `无法播放: 不支持的音频格式`);
+        this._playNextTrack(this.isPersonalFM);
       } else if (errCode === 2 && this._audioRecoveryAttempts < 1) {
         // Refresh an expired URL once for a genuine network error. Rebuilding
         // the Howl repeatedly made long seeks slower and could loop forever.
@@ -432,8 +441,9 @@ export default class {
         this._setPlaying(false);
         store.dispatch(
           'showToast',
-          errCode === 3 ? '音频解码失败，请重试' : '音频加载失败，请重试'
+          errCode === 3 ? '音频解码失败，跳过播放' : '音频加载失败，跳过播放'
         );
+        this._playNextTrack(this.isPersonalFM);
       }
     });
     // A click can arrive while track metadata, IndexedDB or the source URL is
@@ -570,24 +580,62 @@ export default class {
     this._audioRecoveryAttempts = 0;
     this._loading = true;
     const downloadedTrack = getDownloadedTrack(id);
+    const cloudTrack =
+      this._playlistSource?.type === 'cloudDisk' ||
+      store?.state?.liked?.cloudDisk?.length
+        ? store?.state?.liked?.cloudDisk?.find(
+            item => (item.songId || item.simpleSong?.id) === id
+          )
+        : null;
+    const cloudSong =
+      cloudTrack?.simpleSong ||
+      (cloudTrack?.songName
+        ? {
+            id,
+            name: cloudTrack.songName,
+            ar: [{ name: cloudTrack.artist || '' }],
+            al: { name: cloudTrack.album || '', picUrl: '' },
+            dt: 0,
+          }
+        : null);
     if (downloadedTrack && downloadedTrack.name) {
       this._currentTrack = downloadedTrack;
+    } else if (cloudSong && cloudSong.name) {
+      this._currentTrack = cloudSong;
     } else if (!this._currentTrack || this._currentTrack.id !== id) {
       this._currentTrack = { id, name: '', ar: [{ name: '' }], al: {}, dt: 0 };
     }
-    return getTrackDetail(id)
-      .then(data => data?.songs?.[0] || downloadedTrack)
-      .catch(async error => {
-        if (generation !== this._loadGeneration) return null;
-        if (downloadedTrack && (await getExistingLocalTrackPath(id))) {
-          return downloadedTrack;
-        }
-        throw error;
-      })
+    const fetchTrackMetadata = async () => {
+      if (downloadedTrack && downloadedTrack.name) return downloadedTrack;
+      if (cloudSong && cloudSong.name) return cloudSong;
+      try {
+        const data = await getTrackDetail(id);
+        const s = data?.songs?.[0];
+        if (s) return s;
+      } catch (err) {
+        console.debug('[debug][Player.js] getTrackDetail failed', err);
+      }
+      if (downloadedTrack && (await getExistingLocalTrackPath(id))) {
+        return downloadedTrack;
+      }
+      return cloudSong || null;
+    };
+    return fetchTrackMetadata()
       .then(track => {
         if (generation !== this._loadGeneration) return false;
         if (!track) {
           this._loading = false;
+          store.dispatch('showToast', '无法获取歌曲信息，跳过播放');
+          if (autoplay) {
+            switch (ifUnplayableThen) {
+              case UNPLAYABLE_CONDITION.PLAY_NEXT_TRACK:
+                this._playNextTrack(this.isPersonalFM);
+                break;
+              case UNPLAYABLE_CONDITION.PLAY_PREV_TRACK:
+                this.playPrevTrack();
+                break;
+            }
+          }
           return false;
         }
         this._currentTrack = track;
@@ -601,7 +649,13 @@ export default class {
         );
       })
       .catch(error => {
-        if (generation === this._loadGeneration) this._loading = false;
+        if (generation === this._loadGeneration) {
+          this._loading = false;
+          if (autoplay) {
+            store.dispatch('showToast', '歌曲加载异常，跳过播放');
+            this._playNextTrack(this.isPersonalFM);
+          }
+        }
         throw error;
       });
   }
@@ -628,7 +682,10 @@ export default class {
         try {
           const { prepareCloudM4a } = await import('@/utils/alac');
           const wav = await prepareCloudM4a(source, controller.signal);
-          if (generation !== this._loadGeneration || controller.signal.aborted) {
+          if (
+            generation !== this._loadGeneration ||
+            controller.signal.aborted
+          ) {
             if (wav) URL.revokeObjectURL(wav);
             return false;
           }
@@ -681,17 +738,18 @@ export default class {
   _cacheNextTrack() {
     if (this._playlistSource.type === 'cloudDisk') return;
     let nextTrackID = this._isPersonalFM
-      ? this._personalFMNextTrack?.id ?? 0
+      ? (this._personalFMNextTrack?.id ?? 0)
       : this._getNextTrack()[0];
     if (!nextTrackID) return;
     if (this._personalFMTrack.id == nextTrackID) return;
     const downloaded = getDownloadedTrack(nextTrackID);
-    const prefetch = () => getTrackDetail(nextTrackID)
-      .then(data => {
-        const track = data?.songs?.[0];
-        if (track) return this._getAudioSource(track);
-      })
-      .catch(() => {});
+    const prefetch = () =>
+      getTrackDetail(nextTrackID)
+        .then(data => {
+          const track = data?.songs?.[0];
+          if (track) return this._getAudioSource(track);
+        })
+        .catch(() => {});
     if (downloaded && isElectron) {
       // A valid local file needs no network prefetch.
       getExistingLocalTrackPath(nextTrackID).then(path => {
@@ -1022,10 +1080,7 @@ export default class {
         // Once metadata is known, assigning currentTime immediately makes
         // Chromium issue a byte-range request for the destination. Do not wait
         // for Howler's full loaded state first.
-        if (
-          media?.readyState >= 1 &&
-          Number.isFinite(media.duration)
-        ) {
+        if (media?.readyState >= 1 && Number.isFinite(media.duration)) {
           try {
             media.currentTime = target;
           } catch (error) {

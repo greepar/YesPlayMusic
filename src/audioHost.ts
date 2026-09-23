@@ -90,13 +90,18 @@ ipc.on('player:command', async (_: unknown, command: PlayerCommand) => {
       value = await player[command.name](...command.args);
     }
     publish();
-    ipc.send('player:result', JSON.parse(JSON.stringify({
-      requestId: command.requestId,
-      sessionId,
-      ok: true,
-      version,
-      value,
-    })));
+    ipc.send(
+      'player:result',
+      JSON.parse(
+        JSON.stringify({
+          requestId: command.requestId,
+          sessionId,
+          ok: true,
+          version,
+          value,
+        })
+      )
+    );
   } catch (error) {
     ipc.send('player:result', {
       requestId: command.requestId,
@@ -124,6 +129,15 @@ ipc.on('shuffle', () => player.switchShuffle());
 ipc.on('like', async () => {
   await store.dispatch('likeATrack', player.currentTrack.id);
   publish();
+});
+ipc.on('player:sync-liked', (_: unknown, likedSongs: number[]) => {
+  if (Array.isArray(likedSongs)) {
+    store.commit('updateLikedXXX', {
+      name: 'songs',
+      data: likedSongs,
+    });
+    publish();
+  }
 });
 ipc.on('system-resume', () => {
   if (player.playing && player._howler && !player._howler.playing()) {

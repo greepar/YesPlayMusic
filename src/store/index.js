@@ -22,6 +22,9 @@ const options = {
 };
 
 const store = createStore(options);
+if (typeof window !== 'undefined') {
+  window.__store__ = store;
+}
 
 if ([undefined, null].includes(store.state.settings.lang)) {
   const defaultLang = 'en';

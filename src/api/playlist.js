@@ -51,7 +51,7 @@ export function getPlaylistDetail(id, noCache = false) {
     method: 'get',
     params,
   }).then(data => {
-    if (data.playlist) {
+    if (data && data.playlist) {
       data.playlist.tracks = mapTrackPlayableStatus(
         data.playlist.tracks,
         data.privileges || []

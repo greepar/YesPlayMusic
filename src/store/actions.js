@@ -33,26 +33,37 @@ export default {
     });
   },
   likeATrack({ state, commit, dispatch }, id) {
+    if (!id) return;
     if (!isAccountLoggedIn()) {
       dispatch('showToast', '此操作需要登录网易云账号');
+      return;
+    }
+    const isCloudTrack =
+      state.player?.playlistSource?.type === 'cloudDisk' ||
+      state.liked.cloudDisk?.some(c => (c.songId || c.simpleSong?.id) === id);
+    if (isCloudTrack && !state.liked.songs.includes(id)) {
+      dispatch('showToast', '云盘私人歌曲不支持收藏到我喜欢的音乐');
       return;
     }
     let like = true;
     if (state.liked.songs.includes(id)) like = false;
     likeATrack({ id, like })
       .then(() => {
+        let newLikeSongs;
         if (like === false) {
-          commit('updateLikedXXX', {
-            name: 'songs',
-            data: state.liked.songs.filter(d => d !== id),
-          });
+          newLikeSongs = state.liked.songs.filter(d => d !== id);
         } else {
-          let newLikeSongs = state.liked.songs;
-          newLikeSongs.push(id);
-          commit('updateLikedXXX', {
-            name: 'songs',
-            data: newLikeSongs,
-          });
+          newLikeSongs = [...state.liked.songs, id];
+        }
+        commit('updateLikedXXX', {
+          name: 'songs',
+          data: newLikeSongs,
+        });
+        if (process.env.IS_ELECTRON === true) {
+          try {
+            const ipc = window.require?.('electron')?.ipcRenderer;
+            ipc?.send('player:sync-liked', newLikeSongs);
+          } catch (_) {}
         }
         dispatch('fetchLikedSongsWithDetails');
       })
@@ -76,26 +87,30 @@ export default {
     }
   },
   fetchLikedSongsWithDetails: ({ state, commit }) => {
-    return getPlaylistDetail(state.data.likedSongPlaylistID, true).then(
-      result => {
+    if (!state.data.likedSongPlaylistID) return Promise.resolve();
+    return getPlaylistDetail(state.data.likedSongPlaylistID, true)
+      .then(result => {
+        if (!result || !result.playlist) {
+          return;
+        }
         if (result.playlist?.trackIds?.length === 0) {
-          return new Promise(resolve => {
-            resolve();
-          });
+          return;
         }
         return getTrackDetail(
           result.playlist.trackIds
             .slice(0, 12)
             .map(t => t.id)
             .join(',')
-        ).then(result => {
-          commit('updateLikedXXX', {
-            name: 'songsWithDetails',
-            data: result.songs,
-          });
+        ).then(res => {
+          if (res?.songs) {
+            commit('updateLikedXXX', {
+              name: 'songsWithDetails',
+              data: res.songs,
+            });
+          }
         });
-      }
-    );
+      })
+      .catch(() => {});
   },
   fetchLikedPlaylist: ({ state, commit }) => {
     if (!isLooseLoggedIn()) return;

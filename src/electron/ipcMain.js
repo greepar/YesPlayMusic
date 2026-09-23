@@ -153,6 +153,14 @@ export function initIpcMain(
       resolve(result);
     }
   });
+  ipcMain.on('player:sync-liked', (event, likedSongs) => {
+    audioWindow?.webContents.send('player:sync-liked', likedSongs);
+    if (Array.isArray(likedSongs) && latestPlayerSnapshot?.currentTrackID) {
+      const isLiked = likedSongs.includes(latestPlayerSnapshot.currentTrackID);
+      latestPlayerSnapshot.isCurrentTrackLiked = isLiked;
+      trayEventEmitter?.emit('updateLikeState', isLiked);
+    }
+  });
   ipcMain.on('player:subscribe', event => {
     if (!isUiSender(event)) return;
     if (latestPlayerSnapshot)
@@ -385,9 +393,7 @@ export function initIpcMain(
           'YesPlayMusic'
         );
         const downloadFolder =
-          targetDir && targetDir.trim() !== ''
-            ? targetDir
-            : defaultDownloadDir;
+          targetDir && targetDir.trim() !== '' ? targetDir : defaultDownloadDir;
 
         if (!fs.existsSync(downloadFolder)) {
           fs.mkdirSync(downloadFolder, { recursive: true });
@@ -438,15 +444,19 @@ export function initIpcMain(
             for await (const chunk of source) {
               downloadedBytes += chunk.length;
               const now = Date.now();
-              if (now - lastReportTime > 200 || downloadedBytes === contentLength) {
+              if (
+                now - lastReportTime > 200 ||
+                downloadedBytes === contentLength
+              ) {
                 lastReportTime = now;
                 win.webContents.send('download-progress', {
                   id,
                   downloadedBytes,
                   totalBytes: contentLength,
-                  progress: contentLength > 0
-                    ? Math.round((downloadedBytes / contentLength) * 100)
-                    : 0,
+                  progress:
+                    contentLength > 0
+                      ? Math.round((downloadedBytes / contentLength) * 100)
+                      : 0,
                 });
               }
               yield chunk;
