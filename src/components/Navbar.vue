@@ -122,10 +122,14 @@ export default {
     },
   },
   created() {
-    if (process.platform === 'win32') {
+    if (
+      process.env.IS_ELECTRON === true &&
+      /Windows/i.test(navigator.userAgent)
+    ) {
       this.enableWin32Titlebar = true;
     } else if (
-      process.platform === 'linux' &&
+      process.env.IS_ELECTRON === true &&
+      /Linux/i.test(navigator.userAgent) &&
       this.settings.linuxEnableCustomTitlebar
     ) {
       this.enableLinuxTitlebar = true;

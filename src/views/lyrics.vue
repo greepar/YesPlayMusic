@@ -369,10 +369,12 @@ export default {
       },
     },
     imageUrl() {
-      return this.player.currentTrack?.al?.picUrl + '?param=1024y1024';
+      const picUrl = this.currentTrack?.al?.picUrl;
+      return picUrl ? `${picUrl}?param=1024y1024` : '';
     },
     bgImageUrl() {
-      return this.player.currentTrack?.al?.picUrl + '?param=512y512';
+      const picUrl = this.currentTrack?.al?.picUrl;
+      return picUrl ? `${picUrl}?param=512y512` : '';
     },
     isShowLyricTypeSwitch() {
       return this.romalyric.length > 0 && this.tlyric.length > 0;
@@ -817,8 +819,13 @@ export default {
     },
     getCoverColor() {
       if (this.settings.lyricsBackground !== true) return;
-      const cover = this.currentTrack.al?.picUrl + '?param=256y256';
       const requestId = ++this.colorRequestId;
+      const picUrl = this.currentTrack.al?.picUrl;
+      if (!picUrl) {
+        this.background = '';
+        return;
+      }
+      const cover = `${picUrl}?param=256y256`;
       Vibrant.from(cover, { colorCount: 1 })
         .getPalette()
         .then(palette => {
@@ -827,6 +834,9 @@ export default {
           const color = originColor.darken(0.1).rgb().string();
           const color2 = originColor.lighten(0.28).rotate(-30).rgb().string();
           this.background = `linear-gradient(to top left, ${color}, ${color2})`;
+        })
+        .catch(() => {
+          if (requestId === this.colorRequestId) this.background = '';
         });
     },
     hasList() {
