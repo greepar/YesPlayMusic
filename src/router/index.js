@@ -135,9 +135,13 @@ const routes = [
 ];
 
 const router = createRouter({
-  history: process.env.IS_ELECTRON
-    ? createWebHashHistory()
-    : createWebHistory(),
+  // Hash URLs (/#/library) work on any static host without an index.html
+  // fallback. Web builds can opt into clean URLs with
+  // VUE_APP_ROUTER_MODE=history when the host rewrites unknown paths.
+  history:
+    !process.env.IS_ELECTRON && process.env.VUE_APP_ROUTER_MODE === 'history'
+      ? createWebHistory()
+      : createWebHashHistory(),
   routes,
 });
 
