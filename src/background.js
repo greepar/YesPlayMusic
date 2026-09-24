@@ -186,6 +186,13 @@ class Background {
     // 省下一个独立的渲染进程（实测冷启动约 -190MB，进程数与没有音频后台时一致）。
     // 代价：这个渲染进程崩溃时界面和音频会一起停止（音频页面会被自动重建一次）。
     app.commandLine.appendSwitch('process-per-site');
+    // 开发模式开放 CDP 端口，供 DevTools / chrome-devtools-mcp 连接调试
+    if (isDevelopment) {
+      app.commandLine.appendSwitch(
+        'remote-debugging-port',
+        process.env.REMOTE_DEBUGGING_PORT || '9222'
+      );
+    }
 
     // handle app events
     this.handleAppEvents();
@@ -318,12 +325,18 @@ class Background {
     this.window.setMenuBarVisibility(false);
 
     if (process.env.WEBPACK_DEV_SERVER_URL) {
-      // Load the url of the dev server if in development mode
+      // Load the url of the dev server if in development mode.
+      // WEBPACK_DEV_SERVER_URL ends with '/'; a '//' path serves the raw
+      // template without the injected bundles.
+      const devServerUrl = process.env.WEBPACK_DEV_SERVER_URL.replace(
+        /\/$/,
+        ''
+      );
       this.window.loadURL(
         restoredRoute
-          ? `${process.env.WEBPACK_DEV_SERVER_URL}/${restoredRoute}`
+          ? `${devServerUrl}/${restoredRoute}`
           : showLibraryDefault
-          ? `${process.env.WEBPACK_DEV_SERVER_URL}/#/library`
+          ? `${devServerUrl}/#/library`
           : process.env.WEBPACK_DEV_SERVER_URL
       );
       if (!process.env.IS_TEST) this.window.webContents.openDevTools();
@@ -410,7 +423,10 @@ class Background {
       },
     });
     const audioUrl = process.env.WEBPACK_DEV_SERVER_URL
-      ? `${process.env.WEBPACK_DEV_SERVER_URL}/audio.html?audioHost=1`
+      ? `${process.env.WEBPACK_DEV_SERVER_URL.replace(
+          /\/$/,
+          ''
+        )}/audio.html?audioHost=1`
       : 'http://localhost:27232/audio.html?audioHost=1';
     this.audioWindow.loadURL(audioUrl);
     this.audioWindow.on('close', event => {
