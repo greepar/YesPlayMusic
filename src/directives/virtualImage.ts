@@ -28,9 +28,37 @@ function resolveSource(value: unknown, arg?: string): string {
 const states = new WeakMap<HTMLImageElement, VirtualImageState>();
 const images = new Set<HTMLImageElement>();
 
-/** 真实图片加载完成后打上标记，由 CSS 负责淡入；换回占位图时清除，下次加载会再次淡入 */
+// 已经加载过的图片地址。滚出视口再滚回来、或列表行被回收重建时，图片会从缓存里
+// 立即出来，这时不需要再淡入；只有真正要等网络的图片才淡入。
+const MAX_LOADED_SOURCES = 2000;
+const loadedSources = new Set<string>();
+
+function rememberLoadedSource(source: string): void {
+  loadedSources.delete(source);
+  loadedSources.add(source);
+  if (loadedSources.size > MAX_LOADED_SOURCES) {
+    loadedSources.delete(loadedSources.values().next().value as string);
+  }
+}
+
+/** 真实图片加载完成后打上标记，由 CSS 负责淡入；换回占位图时清除 */
 function handleLoad(this: HTMLImageElement): void {
-  if (this.getAttribute('src') !== EMPTY_IMAGE) this.dataset.loaded = '';
+  const source = this.getAttribute('src');
+  if (!source || source === EMPTY_IMAGE) return;
+  rememberLoadedSource(source);
+  this.dataset.loaded = '';
+}
+
+function setImageSource(image: HTMLImageElement, source: string): void {
+  delete image.dataset.loaded;
+  image.src = source;
+  if (source === EMPTY_IMAGE) return;
+  // 加载过的地址，或浏览器内存缓存里已经有的图片，直接显示不做淡入
+  if (loadedSources.has(source) || image.complete) {
+    image.dataset.instant = '';
+  } else {
+    delete image.dataset.instant;
+  }
 }
 
 const pendingImages = new Set<HTMLImageElement>();
@@ -47,8 +75,7 @@ function commitImages(): void {
         ? state.source
         : EMPTY_IMAGE;
     if (image.getAttribute('src') === next) return;
-    if (next === EMPTY_IMAGE) delete image.dataset.loaded;
-    image.src = next;
+    setImageSource(image, next);
   });
 }
 
@@ -110,7 +137,7 @@ app.directive('virtual-image', {
       visible: observer === null,
     });
     images.add(image);
-    image.src = observer === null && source ? source : EMPTY_IMAGE;
+    setImageSource(image, observer === null && source ? source : EMPTY_IMAGE);
     observer?.observe(image);
   },
   mounted(image: HTMLImageElement) {

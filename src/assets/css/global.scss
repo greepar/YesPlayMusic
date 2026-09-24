@@ -149,7 +149,8 @@ a {
     opacity: 0;
   }
 }
-img[data-virtual-image][data-loaded] {
+// data-instant：图片之前已经加载过（从缓存出来），不再重复淡入
+img[data-virtual-image][data-loaded]:not([data-instant]) {
   animation: virtual-image-fade-in 0.32s ease-out;
 }
 
