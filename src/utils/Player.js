@@ -708,7 +708,8 @@ export default class {
       if (source) {
         let replaced = false;
         if (track.id === this.currentTrackID) {
-          this._playAudioSource(source, autoplay, track);
+          // A pause while loading clears _playRequested; honour it.
+          this._playAudioSource(source, autoplay && this._playRequested, track);
           replaced = true;
         }
         if (isCacheNextTrack) {

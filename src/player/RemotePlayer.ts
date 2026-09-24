@@ -46,6 +46,7 @@ export default class RemotePlayer {
   private progressBase = 0;
   private progressAt = Date.now();
   private state: any;
+  private pendingTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     this.ipc = window.require('electron').ipcRenderer;
@@ -69,11 +70,21 @@ export default class RemotePlayer {
       personalFMTrack: { id: 0 },
       isCurrentTrackLiked: false,
       sourceKind: '',
+      // Track the user just picked, shown (as playing) before the audio host
+      // has fetched its details and audio. See previewTrack().
+      pendingTrack: null,
     });
     for (const method of METHODS) {
       (this as any)[method] = (...args: unknown[]) =>
         this.command(method, args);
     }
+    // Pausing while a picked track is still loading must cancel its autoplay.
+    const playOrPause = (this as any).playOrPause;
+    (this as any).playOrPause = () => {
+      if (!this.state.pendingTrack) return playOrPause();
+      this.clearPendingTrack();
+      return this.command('pause');
+    };
     this.ipc.on('player:snapshot', (_: unknown, snapshot: PlayerSnapshot) =>
       this.applySnapshot(snapshot)
     );
@@ -104,6 +115,45 @@ export default class RemotePlayer {
         this.state[key] = (snapshot as any)[key];
     });
     this.state.progress = this.progressBase;
+    this.reconcilePendingTrack();
+  }
+
+  /**
+   * Show a track the user just picked right away, as if it were already
+   * playing, while the audio host loads its details and audio.
+   */
+  previewTrack(track: any) {
+    if (!track?.id || !track.name) return;
+    this.state.pendingTrack = {
+      track: JSON.parse(JSON.stringify(track)),
+      acknowledged: false,
+    };
+    this.progressBase = 0;
+    this.progressAt = Date.now();
+    this.state.progress = 0;
+    if (track.dt) this.state.duration = track.dt / 1000;
+    if (this.pendingTimer) clearTimeout(this.pendingTimer);
+    // Safety net in case the host never switches to this track.
+    this.pendingTimer = setTimeout(() => this.clearPendingTrack(), 15000);
+  }
+
+  private clearPendingTrack() {
+    if (this.pendingTimer) clearTimeout(this.pendingTimer);
+    this.pendingTimer = null;
+    this.state.pendingTrack = null;
+  }
+
+  private reconcilePendingTrack() {
+    const pending = this.state.pendingTrack;
+    if (!pending) return;
+    if (this.state.currentTrackID === pending.track.id) {
+      pending.acknowledged = true;
+      // Loaded (playing) or failed: the host state is authoritative again.
+      if (!this.state.loading) this.clearPendingTrack();
+    } else if (pending.acknowledged) {
+      // The host moved on, e.g. skipped an unplayable track.
+      this.clearPendingTrack();
+    }
   }
 
   private command(
@@ -161,13 +211,18 @@ export default class RemotePlayer {
     return this.state.enabled;
   }
   get playing() {
-    return this.state.playing;
+    return this.state.pendingTrack ? true : this.state.playing;
   }
   get currentTrack() {
-    return this.state.currentTrack;
+    const pending = this.state.pendingTrack?.track;
+    const current = this.state.currentTrack;
+    // Keep the preview until the host has this track's details.
+    if (pending && !(current?.id === pending.id && current.name))
+      return pending;
+    return current;
   }
   get currentTrackID() {
-    return this.state.currentTrackID;
+    return this.state.pendingTrack?.track.id ?? this.state.currentTrackID;
   }
   get playlistSource() {
     return this.state.playlistSource;

@@ -317,6 +317,11 @@ export default {
       this.rightClickedTrackIndex = -1;
     },
     playThisList(trackID) {
+      if (this.dbclickTrackFunc !== 'none') {
+        // Switch the UI to the picked song at once; audio loads behind it.
+        const entry = this.tracks.find(t => (t.id || t.songId) === trackID);
+        this.player.previewTrack?.(entry?.simpleSong ?? entry);
+      }
       if (this.dbclickTrackFunc === 'default') {
         this.playThisListDefault(trackID);
       } else if (this.dbclickTrackFunc === 'none') {
