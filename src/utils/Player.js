@@ -21,6 +21,7 @@ import { Howl, Howler } from 'howler';
 import shuffle from 'lodash/shuffle';
 
 const PLAY_PAUSE_FADE_DURATION = 200;
+let pauseFadeSeq = 0;
 
 const INDEX_IN_PLAY_NEXT = -1;
 
@@ -115,6 +116,14 @@ export default class {
     Object.defineProperty(this, '_cloudDecode', { enumerable: false });
     this._cloudWav = null;
     Object.defineProperty(this, '_cloudWav', { enumerable: false });
+    // Id of an in-flight pause fade-out; play() cancels it. A number, not an
+    // object: reading an object back through the reactive store wraps it, so
+    // an identity check would never match.
+    this._pauseFade = null;
+    Object.defineProperty(this, '_pauseFade', {
+      enumerable: false,
+      writable: true,
+    });
 
     // _init() is called by the store once this instance is reactive (see
     // store/index.js); timers started here would mutate the raw object and
@@ -227,12 +236,10 @@ export default class {
     return this._howler?._src?.includes('kuwo.cn') ? 'kuwo' : '';
   }
   set progress(value) {
-    if (this._howler) {
-      this._howler.seek(value);
-      if (isCreateMpris) {
-        ipcRenderer?.send('seeked', this._howler.seek());
-      }
-    }
+    // Go through seek() so _progress (what the slider shows) updates at once
+    // and seeks during loading are handled; a bare Howler seek left the
+    // slider jumping back until the next progress tick.
+    if (this._howler) this.seek(value);
   }
   get isCurrentTrackLiked() {
     return store.state.liked.songs.includes(this.currentTrack.id);
@@ -349,6 +356,8 @@ export default class {
   }
   _playAudioSource(source, autoplay = true, track = this.currentTrack) {
     const requested = autoplay || this._playRequested;
+    // A pause fade on the previous Howl never completes once it is unloaded.
+    this._pauseFade = null;
     Howler.unload();
     // Howler defaults HTML5 audio to `canplaythrough`. For a remote FLAC this
     // can mean waiting for most (or all) of the file even though Chromium can
@@ -1016,13 +1025,19 @@ export default class {
       this._setPlaying(false);
       return;
     }
+    // Update the UI right away; the fade-out only affects what you hear.
+    this._setPlaying(false);
+    const fade = ++pauseFadeSeq;
+    this._pauseFade = fade;
     howler.fade(this.volume, 0, PLAY_PAUSE_FADE_DURATION);
 
     howler.once('fade', () => {
+      // play() during the fade-out cancels the pause.
+      if (this._pauseFade !== fade) return;
+      this._pauseFade = null;
       // A track change during the fade must not pause the newly-created Howl.
       howler.pause();
       if (this._howler !== howler) return;
-      this._setPlaying(false);
       setTitle(null);
       this._pauseDiscordPresence(this._currentTrack);
     });
@@ -1030,6 +1045,17 @@ export default class {
   play() {
     this._playRequested = true;
     if (!this._howler) return false;
+    this._pauseFade = null;
+    if (this._howler.playing() && !this._playing) {
+      // Resumed while the pause was still fading out: fade back in instead.
+      this._howler.fade(
+        this._howler.volume(),
+        this.volume,
+        PLAY_PAUSE_FADE_DURATION
+      );
+      this._setPlaying(true);
+      return;
+    }
     if (this._howler.playing()) return;
     if (
       this._howler.state() !== 'loaded' &&
@@ -1037,6 +1063,13 @@ export default class {
     )
       return;
 
+    // Show the pause button right away; buffering a stream before the 'play'
+    // event can take a noticeable moment. Load errors reset it (see loaderror).
+    this._setPlaying(true);
+    this._howler.once('playerror', () => {
+      this._playRequested = false;
+      this._setPlaying(false);
+    });
     this._howler.play();
 
     this._howler?.once('play', () => {
@@ -1053,7 +1086,10 @@ export default class {
     });
   }
   playOrPause() {
-    if (this._howler?.playing()) {
+    // Follow what the button shows: the Howl still reports playing during a
+    // pause fade-out, and not yet playing while a requested play buffers.
+    const audible = this._howler?.playing() && !this._pauseFade;
+    if (this._playing || audible) {
       this.pause();
     } else {
       this.play();
