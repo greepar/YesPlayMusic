@@ -1,5 +1,4 @@
-import router from '@/router';
-import { doLogout, getCookie } from '@/utils/auth';
+import { getCookie } from '@/utils/cookie';
 import axios from 'axios';
 
 let baseURL = '';
@@ -82,6 +81,13 @@ service.interceptors.response.use(
       data.msg === '需要登录'
     ) {
       console.warn('Token has expired. Logout now!');
+
+      // auth and router import the store, which imports the API modules that
+      // use this file; load them lazily to avoid an import cycle.
+      const [{ doLogout }, { default: router }] = await Promise.all([
+        import('@/utils/auth'),
+        import('@/router'),
+      ]);
 
       // 登出帳戶
       doLogout();

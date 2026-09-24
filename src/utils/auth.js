@@ -1,24 +1,8 @@
-import Cookies from 'js-cookie';
 import { logout } from '@/api/auth';
 import store from '@/store';
+import { getCookie, removeCookie } from '@/utils/cookie';
 
-export function setCookies(string) {
-  const cookies = string.split(';;');
-  cookies.map(cookie => {
-    document.cookie = cookie;
-    const cookieKeyValue = cookie.split(';')[0].split('=');
-    localStorage.setItem(`cookie-${cookieKeyValue[0]}`, cookieKeyValue[1]);
-  });
-}
-
-export function getCookie(key) {
-  return Cookies.get(key) ?? localStorage.getItem(`cookie-${key}`);
-}
-
-export function removeCookie(key) {
-  Cookies.remove(key);
-  localStorage.removeItem(`cookie-${key}`);
-}
+export { setCookies, getCookie, removeCookie } from '@/utils/cookie';
 
 // MUSIC_U 只有在账户登录的情况下才有
 export function isLoggedIn() {

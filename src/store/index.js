@@ -2,7 +2,7 @@ import { createStore } from 'vuex';
 import state from './state';
 import mutations from './mutations';
 import actions from './actions';
-import { changeAppearance, changeThemeColor } from '@/utils/common';
+import { changeAppearance, changeThemeColor } from '@/utils/theme';
 import Player from '@/utils/Player';
 import RemotePlayer from '@/player/RemotePlayer';
 // vuex 自定义插件
