@@ -193,7 +193,9 @@ export default class RemotePlayer {
     // Progress events update state.progress every 250 ms; using progressBase
     // here left Vue with no changing dependency, so sliders stayed at 0:00
     // while audio continued playing.
-    if (!this.state.playing) return this.state.progress;
+    // Don't extrapolate while the host is still buffering (it reports a
+    // requested-but-loading track as playing).
+    if (!this.state.playing || this.state.loading) return this.state.progress;
     return Math.min(
       this.state.duration || Infinity,
       this.state.progress + (Date.now() - this.progressAt) / 1000

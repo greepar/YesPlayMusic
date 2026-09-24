@@ -201,7 +201,9 @@ export default class {
     return this._enabled;
   }
   get playing() {
-    return this._playing;
+    // A requested track that is still loading already counts as playing, so
+    // the button shows pause right away instead of after buffering.
+    return this._playing || (this._loading && this._playRequested);
   }
   get currentTrack() {
     return this._currentTrack;
@@ -680,6 +682,18 @@ export default class {
     this._loading = true;
   }
   /**
+   * Show a track the user just picked (with the details the list already
+   * has) and stop the current song, before the list and audio are loaded.
+   * The desktop UI does the same in RemotePlayer.previewTrack().
+   */
+  previewTrack(track) {
+    if (!track?.id || !track.name) return;
+    this._stopCurrentAudio();
+    this._currentTrack = JSON.parse(JSON.stringify(track));
+    this._playRequested = true;
+    setTitle(this._currentTrack);
+  }
+  /**
    * Load a new list (playlist/album/artist) and play from it. The current
    * song stops immediately instead of playing on while the list downloads.
    */
@@ -756,6 +770,7 @@ export default class {
         }
         return replaced;
       } else {
+        this._loading = false;
         store.dispatch('showToast', `无法播放 ${track.name}`);
         switch (ifUnplayableThen) {
           case UNPLAYABLE_CONDITION.PLAY_NEXT_TRACK:
@@ -1118,7 +1133,7 @@ export default class {
     // Follow what the button shows: the Howl still reports playing during a
     // pause fade-out, and not yet playing while a requested play buffers.
     const audible = this._howler?.playing() && !this._pauseFade;
-    if (this._playing || audible) {
+    if (this.playing || audible) {
       this.pause();
     } else {
       this.play();
