@@ -29,10 +29,9 @@ export default {
     MvRow,
     ButtonTwoTone,
   },
-  beforeRouteUpdate(to, from, next) {
+  beforeRouteUpdate(to) {
     this.id = to.params.id;
     this.loadData();
-    next();
   },
   data() {
     return {

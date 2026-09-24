@@ -174,10 +174,9 @@ export default {
     Modal,
     ContextMenu,
   },
-  beforeRouteUpdate(to, from, next) {
+  beforeRouteUpdate(to) {
     this.show = false;
     this.loadData(to.params.id);
-    next();
   },
   data() {
     return {

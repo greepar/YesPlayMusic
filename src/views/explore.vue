@@ -81,14 +81,13 @@ export default {
     ButtonTwoTone,
     SvgIcon,
   },
-  beforeRouteUpdate(to, from, next) {
+  beforeRouteUpdate(to) {
     this.showLoadMoreButton = false;
     this.hasMore = true;
     this.playlists = [];
     this.offset = 1;
     this.activeCategory = to.query.category;
     this.getPlaylist();
-    next();
   },
   data() {
     return {

@@ -17,7 +17,9 @@ function getInitialLocale() {
 }
 
 const i18n = createI18n({
-  legacy: true,
+  legacy: false,
+  // Keep $t / $i18n available in Options API components and templates.
+  globalInjection: true,
   locale: getInitialLocale(),
   messages: {
     en,
@@ -27,14 +29,16 @@ const i18n = createI18n({
   },
   missingWarn: false,
   fallbackWarn: false,
+  // Some bundled messages (e.g. the login notice) intentionally contain <br />.
+  warnHtmlMessage: false,
 });
 
 // Keep the small imperative API used by existing utility modules while the
 // templates use vue-i18n's Vue 3 plugin normally.
 Object.defineProperty(i18n, 'locale', {
-  get: () => i18n.global.locale,
+  get: () => i18n.global.locale.value,
   set: value => {
-    i18n.global.locale = value;
+    i18n.global.locale.value = value;
   },
 });
 i18n.t = (...args) => i18n.global.t(...args);

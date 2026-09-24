@@ -53,9 +53,8 @@ export default {
   },
 
   created() {
-    this.$router.beforeEach((to, from, next) => {
+    this.$router.beforeEach(() => {
       this.show = false;
-      next();
     });
   },
 

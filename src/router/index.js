@@ -141,28 +141,17 @@ const router = createRouter({
   routes,
 });
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(to => {
   NProgress.start();
   // 需要登录的逻辑
   if (to.meta.requireAccountLogin) {
-    if (isAccountLoggedIn()) {
-      return next();
-    } else {
-      return next({ path: '/login/account' });
-    }
+    return isAccountLoggedIn() ? true : { path: '/login/account' };
   }
-  if (to.meta.requireLogin) {
-    if (isLooseLoggedIn()) {
-      return next();
-    } else {
-      if (process.env.IS_ELECTRON === true) {
-        return next({ path: '/login/account' });
-      } else {
-        return next({ path: '/login' });
-      }
-    }
+  if (to.meta.requireLogin && !isLooseLoggedIn()) {
+    return process.env.IS_ELECTRON === true
+      ? { path: '/login/account' }
+      : { path: '/login' };
   }
-  return next();
 });
 
 router.afterEach(() => NProgress.done());

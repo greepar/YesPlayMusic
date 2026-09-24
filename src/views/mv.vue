@@ -62,9 +62,8 @@ export default {
     ButtonIcon,
     ContextMenu,
   },
-  beforeRouteUpdate(to, from, next) {
+  beforeRouteUpdate(to) {
     this.getData(to.params.id);
-    next();
   },
   data() {
     return {

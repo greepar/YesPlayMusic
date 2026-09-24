@@ -691,6 +691,7 @@ import {
 } from '@/utils/common';
 import { countDBSize, clearDB } from '@/utils/db';
 import pkg from '../../package.json';
+import locale from '@/locale';
 import { isElectron, getElectron, getIpcRenderer } from '@/utils/platform';
 
 const electron = getElectron();
@@ -791,7 +792,7 @@ export default {
         return this.settings.lang;
       },
       set(lang) {
-        this.$i18n.locale = lang;
+        locale.locale = lang;
         this.$store.commit('changeLang', lang);
       },
     },

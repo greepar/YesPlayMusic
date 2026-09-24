@@ -209,10 +209,11 @@ export default {
     Modal,
     ContextMenu,
   },
-  beforeRouteUpdate(to, from, next) {
+  beforeRouteUpdate(to) {
     this.artist.img1v1Url =
       'https://p1.music.126.net/VnZiScyynLG7atLIZ2YPkw==/18686200114669622.jpg';
-    this.loadData(to.params.id, next);
+    // Finish navigating once the artist info arrives (or fails to).
+    return this.loadData(to.params.id).catch(() => {});
   },
   data() {
     return {
@@ -271,17 +272,16 @@ export default {
   methods: {
     ...mapMutations(['appendTrackToPlayerList']),
     ...mapActions(['playFirstTrackOnList', 'playTrackOnListByID', 'showToast']),
-    loadData(id, next = undefined) {
+    loadData(id) {
       setTimeout(() => {
         if (!this.show) NProgress.start();
       }, 1000);
       this.show = false;
       const main = document.querySelector('main');
       if (main) main.scrollTo({ top: 0 });
-      getArtist(id).then(data => {
+      const artistLoaded = getArtist(id).then(data => {
         this.artist = data.artist;
         this.setPopularTracks(data.hotSongs);
-        if (next !== undefined) next();
         NProgress.done();
         this.show = true;
       });
@@ -298,6 +298,7 @@ export default {
           this.similarArtists = data.artists;
         });
       }
+      return artistLoaded;
     },
     setPopularTracks(hotSongs) {
       const trackIDs = hotSongs.map(t => t.id);
