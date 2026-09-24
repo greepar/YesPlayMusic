@@ -1,6 +1,7 @@
 // import store, { state, dispatch, commit } from "@/store";
 import { isAccountLoggedIn, isLooseLoggedIn } from '@/utils/auth';
 import { likeATrack } from '@/api/track';
+import locale from '@/locale';
 import { getPlaylistDetail } from '@/api/playlist';
 import { getTrackDetail } from '@/api/track';
 import {
@@ -59,6 +60,12 @@ export default {
           name: 'songs',
           data: newLikeSongs,
         });
+        dispatch(
+          'showToast',
+          locale.t(
+            like ? 'toast.savedToMyLikedSongs' : 'toast.removedFromMyLikedSongs'
+          )
+        );
         if (process.env.IS_ELECTRON === true) {
           try {
             const ipc = window.require?.('electron')?.ipcRenderer;
