@@ -74,7 +74,11 @@ export default {
   fetchLikedSongs: ({ state, commit }) => {
     if (!isLooseLoggedIn()) return;
     if (isAccountLoggedIn()) {
-      return userLikedSongsIDs({ uid: state.data.user.userId }).then(result => {
+      // The profile can still be missing right after login or if fetching it
+      // failed; skip instead of throwing from every page that loads likes.
+      const uid = state.data.user?.userId;
+      if (!uid) return Promise.resolve();
+      return userLikedSongsIDs({ uid }).then(result => {
         if (result.ids) {
           commit('updateLikedXXX', {
             name: 'songs',
