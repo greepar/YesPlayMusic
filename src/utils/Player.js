@@ -22,6 +22,8 @@ import shuffle from 'lodash/shuffle';
 
 const PLAY_PAUSE_FADE_DURATION = 200;
 let pauseFadeSeq = 0;
+// Latest playlist/album/artist load; older responses are ignored.
+let listRequestSeq = 0;
 
 const INDEX_IN_PLAY_NEXT = -1;
 
@@ -570,25 +572,11 @@ export default class {
     autoplay = true,
     ifUnplayableThen = UNPLAYABLE_CONDITION.PLAY_NEXT_TRACK
   ) {
-    const generation = ++this._loadGeneration;
-    this._playRequested = autoplay;
-    if (autoplay && this._currentTrack.name) {
-      this._scrobble(this.currentTrack, this._howler?.seek());
-    }
     // Stop the previous song synchronously. The selected row changes at once,
     // while metadata and the stream continue loading in the background.
-    clearTimeout(this._cacheTimer);
-    this._cloudDecode?.abort();
-    this._cloudDecode = null;
-    if (this._cloudWav) URL.revokeObjectURL(this._cloudWav);
-    this._cloudWav = null;
-    Howler.unload();
-    this._howler = null;
-    this._setPlaying(false);
-    this._progress = 0;
-    this._pendingSeek = null;
-    this._audioRecoveryAttempts = 0;
-    this._loading = true;
+    this._stopCurrentAudio(autoplay);
+    const generation = this._loadGeneration;
+    this._playRequested = autoplay;
     const downloadedTrack = getDownloadedTrack(id);
     const cloudTrack =
       this._playlistSource?.type === 'cloudDisk' ||
@@ -667,6 +655,47 @@ export default class {
           }
         }
         throw error;
+      });
+  }
+  /**
+   * Stop the current song right away and cancel any load in flight.
+   * @param {boolean} scrobble Report the stopped song's play time first.
+   */
+  _stopCurrentAudio(scrobble = true) {
+    ++this._loadGeneration;
+    if (scrobble && this._howler && this._currentTrack.name) {
+      this._scrobble(this.currentTrack, this._howler.seek());
+    }
+    clearTimeout(this._cacheTimer);
+    this._cloudDecode?.abort();
+    this._cloudDecode = null;
+    if (this._cloudWav) URL.revokeObjectURL(this._cloudWav);
+    this._cloudWav = null;
+    Howler.unload();
+    this._howler = null;
+    this._setPlaying(false);
+    this._progress = 0;
+    this._pendingSeek = null;
+    this._audioRecoveryAttempts = 0;
+    this._loading = true;
+  }
+  /**
+   * Load a new list (playlist/album/artist) and play from it. The current
+   * song stops immediately instead of playing on while the list downloads.
+   */
+  _playFetchedList(fetchTrackIDs, sourceID, sourceType, trackID) {
+    const request = ++listRequestSeq;
+    this._stopCurrentAudio();
+    return fetchTrackIDs()
+      .then(trackIDs => {
+        if (request !== listRequestSeq) return;
+        this.replacePlaylist(trackIDs, sourceID, sourceType, trackID);
+      })
+      .catch(error => {
+        if (request !== listRequestSeq) return;
+        this._loading = false;
+        store.dispatch('showToast', '加载播放列表失败');
+        console.debug('[debug][Player.js] list load failed', error);
       });
   }
   /**
@@ -1172,25 +1201,34 @@ export default class {
     }
   }
   playAlbumByID(id, trackID = 'first') {
-    getAlbum(id).then(data => {
-      let trackIDs = data.songs.map(t => t.id);
-      this.replacePlaylist(trackIDs, id, 'album', trackID);
-    });
+    return this._playFetchedList(
+      () => getAlbum(id).then(data => data.songs.map(t => t.id)),
+      id,
+      'album',
+      trackID
+    );
   }
   playPlaylistByID(id, trackID = 'first', noCache = false) {
     console.debug(
       `[debug][Player.js] playPlaylistByID 👉 id:${id} trackID:${trackID} noCache:${noCache}`
     );
-    getPlaylistDetail(id, noCache).then(data => {
-      let trackIDs = data.playlist.trackIds.map(t => t.id);
-      this.replacePlaylist(trackIDs, id, 'playlist', trackID);
-    });
+    return this._playFetchedList(
+      () =>
+        getPlaylistDetail(id, noCache).then(data =>
+          data.playlist.trackIds.map(t => t.id)
+        ),
+      id,
+      'playlist',
+      trackID
+    );
   }
   playArtistByID(id, trackID = 'first') {
-    getArtist(id).then(data => {
-      let trackIDs = data.hotSongs.map(t => t.id);
-      this.replacePlaylist(trackIDs, id, 'artist', trackID);
-    });
+    return this._playFetchedList(
+      () => getArtist(id).then(data => data.hotSongs.map(t => t.id)),
+      id,
+      'artist',
+      trackID
+    );
   }
   playTrackOnListByID(id, listName = 'default') {
     if (listName === 'default') {
@@ -1199,16 +1237,21 @@ export default class {
     this._replaceCurrentTrack(id);
   }
   playIntelligenceListById(id, trackID = 'first', noCache = false) {
-    getPlaylistDetail(id, noCache).then(data => {
-      const randomId = Math.floor(
-        Math.random() * (data.playlist.trackIds.length + 1)
-      );
-      const songId = data.playlist.trackIds[randomId].id;
-      intelligencePlaylist({ id: songId, pid: id }).then(result => {
-        let trackIDs = result.data.map(t => t.id);
-        this.replacePlaylist(trackIDs, id, 'playlist', trackID);
-      });
-    });
+    return this._playFetchedList(
+      () =>
+        getPlaylistDetail(id, noCache).then(data => {
+          const randomId = Math.floor(
+            Math.random() * data.playlist.trackIds.length
+          );
+          const songId = data.playlist.trackIds[randomId].id;
+          return intelligencePlaylist({ id: songId, pid: id }).then(result =>
+            result.data.map(t => t.id)
+          );
+        }),
+      id,
+      'playlist',
+      trackID
+    );
   }
   addTrackToPlayNext(trackID, playNow = false) {
     this._playNextList.push(trackID);
