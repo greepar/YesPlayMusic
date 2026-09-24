@@ -72,7 +72,9 @@ if (!(player instanceof RemotePlayer))
     set(target, prop, val) {
       // console.log({ prop, val });
       target[prop] = val;
-      if (prop === '_howler') return true;
+      // _progress changes every second and is persisted separately
+      // (playerCurrentTrackTime); don't re-save the whole player for it.
+      if (prop === '_howler' || prop === '_progress') return true;
       clearTimeout(savePlayerTimer);
       savePlayerTimer = setTimeout(() => savePlayer(target), 250);
       clearTimeout(sendPlayerTimer);
@@ -83,6 +85,9 @@ if (!(player instanceof RemotePlayer))
     },
   });
 store.state.player = player;
+// Start the player's timers and restore its track through the reactive store
+// object, so progress/track changes made by them update the UI.
+if (!(player instanceof RemotePlayer)) store.state.player._init();
 
 window.addEventListener('pagehide', () => {
   if (!(player instanceof RemotePlayer) && savePlayerTimer !== null)

@@ -116,8 +116,9 @@ export default class {
     this._cloudWav = null;
     Object.defineProperty(this, '_cloudWav', { enumerable: false });
 
-    // init
-    this._init();
+    // _init() is called by the store once this instance is reactive (see
+    // store/index.js); timers started here would mutate the raw object and
+    // never update the UI.
 
     window.yesplaymusic = {};
     window.yesplaymusic.player = this;
