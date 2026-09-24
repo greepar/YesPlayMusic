@@ -896,7 +896,7 @@ export default class {
     }
 
     ipcRenderer.send('sendLyrics', {
-      track,
+      track: JSON.parse(JSON.stringify(track)),
       lyrics: lyricContent.lrc.lyric,
     });
 
@@ -953,7 +953,8 @@ export default class {
     ) {
       return null;
     }
-    let copyTrack = { ...track };
+    // Plain copy: the track can be a Vue reactive proxy, which IPC can't clone.
+    let copyTrack = JSON.parse(JSON.stringify(track));
     copyTrack.dt -= seekTime * 1000;
     const ipc = getIpcRenderer();
     ipc?.send('playDiscordPresence', copyTrack);
@@ -966,7 +967,7 @@ export default class {
       return null;
     }
     const ipc = getIpcRenderer();
-    ipc?.send('pauseDiscordPresence', track);
+    ipc?.send('pauseDiscordPresence', JSON.parse(JSON.stringify(track)));
   }
   _playNextTrack(isPersonal) {
     if (isPersonal) {
