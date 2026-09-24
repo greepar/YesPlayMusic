@@ -345,6 +345,7 @@ export default {
       isFullscreen: !!document.fullscreenElement,
       rightClickLyric: null,
       colorRequestId: 0,
+      lyricRequestId: 0,
       renderingSuspended: isRenderingSuspended(),
       stopRenderingStateListener: null,
       lyricScrollFrame: null,
@@ -467,7 +468,9 @@ export default {
     },
   },
   watch: {
-    currentTrack() {
+    // RemotePlayer replaces currentTrack on every host snapshot (play/pause,
+    // volume, like...), so only react when the track actually changes.
+    'currentTrack.id'() {
       this.cancelLyricScroll();
       this.highlightLyricIndex = -1;
       if (this.$refs.lyricsContainer) this.$refs.lyricsContainer.scrollTop = 0;
@@ -605,6 +608,14 @@ export default {
     },
     getLyric() {
       if (!this.currentTrack.id) return;
+      const requestId = ++this.lyricRequestId;
+      const isStale = () => requestId !== this.lyricRequestId;
+      const clearLyric = () => {
+        this.lyric = [];
+        this.tlyric = [];
+        this.romalyric = [];
+        return false;
+      };
       if (
         this.currentTrack.pc !== null &&
         this.currentTrack.cd === null &&
@@ -614,21 +625,21 @@ export default {
         return getCloudLyric(
           this.currentTrack.id,
           this.$store.state.data.user?.userId
-        ).then(data => {
-          this.tlyric = [];
-          this.romalyric = [];
-          this.lyric = data?.lrc?.length > 0 ? parseLyric(data.lrc) : [];
-          this.lyricType = 'translation';
-          return true;
-        });
+        )
+          .then(data => {
+            if (isStale()) return false;
+            this.tlyric = [];
+            this.romalyric = [];
+            this.lyric = data?.lrc?.length > 0 ? parseLyric(data.lrc) : [];
+            this.lyricType = 'translation';
+            return true;
+          })
+          .catch(() => (isStale() ? false : clearLyric()));
       }
-      return getLyric(this.currentTrack.id).then(data => {
-        if (!data?.lrc?.lyric) {
-          this.lyric = [];
-          this.tlyric = [];
-          this.romalyric = [];
-          return false;
-        } else {
+      return getLyric(this.currentTrack.id)
+        .then(data => {
+          if (isStale()) return false;
+          if (!data?.lrc?.lyric) return clearLyric();
           let { lyric, tlyric, romalyric } = lyricParser(data);
           lyric = lyric.filter(
             l => !/^作(词|曲)\s*(:|：)\s*无$/.exec(l.content)
@@ -646,25 +657,19 @@ export default {
               );
             });
           }
-          if (lyric.length === 1 && includeAM) {
-            this.lyric = [];
-            this.tlyric = [];
-            this.romalyric = [];
-            return false;
+          if (lyric.length === 1 && includeAM) return clearLyric();
+          this.lyric = lyric;
+          this.tlyric = tlyric;
+          this.romalyric = romalyric;
+          if (tlyric.length * romalyric.length > 0) {
+            this.lyricType = 'translation';
           } else {
-            this.lyric = lyric;
-            this.tlyric = tlyric;
-            this.romalyric = romalyric;
-            if (tlyric.length * romalyric.length > 0) {
-              this.lyricType = 'translation';
-            } else {
-              this.lyricType =
-                lyric.length > 0 ? 'translation' : 'romaPronunciation';
-            }
-            return true;
+            this.lyricType =
+              lyric.length > 0 ? 'translation' : 'romaPronunciation';
           }
-        }
-      });
+          return true;
+        })
+        .catch(() => (isStale() ? false : clearLyric()));
     },
     switchLyricType() {
       this.lyricType =

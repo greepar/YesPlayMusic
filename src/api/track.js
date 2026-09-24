@@ -173,7 +173,8 @@ export function getLyric(id) {
     });
   };
 
-  fetchLatest();
+  // Background refresh; offline playback falls back to the cache below.
+  fetchLatest().catch(() => {});
 
   return getLyricFromCache(id).then(result => {
     return result ?? fetchLatest();
@@ -206,7 +207,8 @@ export function getCloudLyric(songId, userId) {
     });
   };
 
-  fetchLatest();
+  // Background refresh; offline playback falls back to the cache below.
+  fetchLatest().catch(() => {});
 
   return getLyricFromCache(songId).then(result => {
     return result ?? fetchLatest();
