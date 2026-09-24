@@ -317,6 +317,7 @@ import ButtonIcon from '@/components/ButtonIcon.vue';
 import { Vibrant } from 'node-vibrant/browser';
 import Color from 'color';
 import { isAccountLoggedIn } from '@/utils/auth';
+import { isMac } from '@/utils/platform';
 import { hasListSource, getListSourcePath } from '@/utils/playList';
 import locale from '@/locale';
 import {
@@ -356,7 +357,9 @@ export default {
   computed: {
     ...mapState(['player', 'settings', 'showLyrics']),
     isMac() {
-      return process.platform === 'darwin';
+      // process is a browser shim in the renderer bundle; use the shared
+      // platform check, which falls back to the user agent.
+      return isMac;
     },
     currentTrack() {
       return this.player.currentTrack;

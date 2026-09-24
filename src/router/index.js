@@ -141,8 +141,19 @@ const router = createRouter({
   routes,
 });
 
+// Only show the progress bar for navigations that actually take a while;
+// instant page switches would otherwise just flash it.
+const PROGRESS_DELAY = 300;
+let progressTimer = null;
+function finishProgress() {
+  clearTimeout(progressTimer);
+  progressTimer = null;
+  NProgress.done();
+}
+
 router.beforeEach(to => {
-  NProgress.start();
+  clearTimeout(progressTimer);
+  progressTimer = setTimeout(() => NProgress.start(), PROGRESS_DELAY);
   // 需要登录的逻辑
   if (to.meta.requireAccountLogin) {
     return isAccountLoggedIn() ? true : { path: '/login/account' };
@@ -154,7 +165,7 @@ router.beforeEach(to => {
   }
 });
 
-router.afterEach(() => NProgress.done());
-router.onError(() => NProgress.done());
+router.afterEach(finishProgress);
+router.onError(finishProgress);
 
 export default router;

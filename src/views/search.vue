@@ -109,12 +109,12 @@ export default {
       albums: [],
       playlists: [],
       musicVideos: [],
+      // Kept while the (kept-alive) page is hidden, so its links don't
+      // re-render against another route's params.
+      keywords: this.$route.params.keywords ?? '',
     };
   },
   computed: {
-    keywords() {
-      return this.$route.params.keywords ?? '';
-    },
     haveResult() {
       return (
         this.tracks.length +
@@ -127,9 +127,12 @@ export default {
     },
   },
   watch: {
-    keywords: function (newKeywords) {
-      if (newKeywords.length === 0) return;
-      this.getData();
+    $route(to) {
+      if (to.name !== 'search') return;
+      const keywords = to.params.keywords ?? '';
+      if (keywords === this.keywords) return;
+      this.keywords = keywords;
+      if (keywords.length > 0) this.getData();
     },
   },
   created() {

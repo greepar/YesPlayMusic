@@ -692,7 +692,13 @@ import {
 import { countDBSize, clearDB } from '@/utils/db';
 import pkg from '../../package.json';
 import locale from '@/locale';
-import { isElectron, getElectron, getIpcRenderer } from '@/utils/platform';
+import {
+  isElectron,
+  isMac,
+  isLinux,
+  getElectron,
+  getIpcRenderer,
+} from '@/utils/platform';
 
 const electron = getElectron();
 const ipcRenderer = getIpcRenderer();
@@ -733,7 +739,7 @@ export default {
       return /macintosh|mac os x/i.test(navigator.userAgent);
     },
     isLinux() {
-      return process.platform === 'linux';
+      return isLinux;
     },
     version() {
       return pkg.version;
@@ -1266,7 +1272,7 @@ export default {
       } else if (this.settings.lang === 'zh-TW') {
         shortcut = shortcut.replace('Space', '空白鍵');
       }
-      if (process.platform === 'darwin') {
+      if (isMac) {
         return shortcut
           .replace('CommandOrControl', '⌘')
           .replace('Command', '⌘')
