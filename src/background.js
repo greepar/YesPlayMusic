@@ -404,6 +404,7 @@ class Background {
     if (this.window.isMinimized()) this.window.restore();
     this.window.show();
     this.window.focus();
+    setWindowRenderingSuspended(this.window, false);
   }
 
   createAudioWindow() {
