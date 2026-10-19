@@ -1,3 +1,4 @@
+/* global __static */
 'use strict';
 import path from 'path';
 import {
@@ -165,6 +166,8 @@ class Background {
   init() {
     log('initializing');
 
+    if (isLinux) app.setDesktopName('yesplaymusic.desktop');
+
     // Make sure the app is singleton.
     if (!app.requestSingleInstanceLock()) return app.quit();
 
@@ -264,6 +267,7 @@ class Background {
         (isLinux && this.store.get('settings.linuxEnableCustomTitlebar'))
       ),
       title: 'YesPlayMusic',
+      ...(isLinux && { icon: path.join(__static, 'img/icons/icon.png') }),
       show: false,
       webPreferences: {
         webSecurity: false,

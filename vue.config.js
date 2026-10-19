@@ -202,7 +202,7 @@ module.exports = {
             },
           ],
           category: 'Music',
-          icon: './build/icon.icns',
+          icon: 'build/icons/icon.png',
         },
         dmg: {
           icon: 'build/icons/icon.icns',
