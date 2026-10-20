@@ -40,7 +40,17 @@ try {
   if (!(Test-Path -LiteralPath $Target -PathType Leaf) -or
       !(Test-Path -LiteralPath $Staged -PathType Leaf) -or
       (Test-Path -LiteralPath $Backup)) { throw 'Application paths changed' }
-  if ((Get-FileHash -LiteralPath $Staged -Algorithm SHA256).Hash -ne $Digest) {
+  # Use .NET directly: a parent PowerShell 7 process can leave PSModulePath
+  # without Windows PowerShell's utility module (which provides Get-FileHash).
+  $hasher = [Security.Cryptography.SHA256]::Create()
+  $stream = [IO.File]::OpenRead($Staged)
+  try {
+    $actualDigest = [BitConverter]::ToString($hasher.ComputeHash($stream)).Replace('-', '')
+  } finally {
+    $stream.Dispose()
+    $hasher.Dispose()
+  }
+  if ($actualDigest -ne $Digest) {
     throw 'Staged update SHA-256 mismatch'
   }
   Move-WithRetry $Target $Backup
