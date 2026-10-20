@@ -164,6 +164,10 @@ module.exports = {
               target: 'dmg',
               arch: ['x64', 'arm64'],
             },
+            {
+              target: 'zip',
+              arch: ['x64', 'arm64'],
+            },
           ],
           // 没有 Developer ID 证书时（如 CI）electron-builder 会直接跳过签名，
           // 下载后的 arm64 应用会被 Gatekeeper 提示「已损坏」。
