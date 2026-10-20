@@ -350,7 +350,13 @@ public static class YpmPortableLock {
           child.on('exit', resolve);
         });
         const success = mode === 'success' || mode === 'locked';
-        assert.equal(code, success ? 0 : 1);
+        assert.equal(
+          code,
+          success ? 0 : 1,
+          `${mode}: ${await fs
+            .readFile(path.join(root, 'install.log'), 'utf8')
+            .catch(() => 'No installer log')}`
+        );
         assert.deepEqual(
           await fs.readFile(target),
           success ? next : Buffer.from('old')
