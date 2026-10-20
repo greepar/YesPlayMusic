@@ -34,6 +34,7 @@ import { createTouchBar } from './electron/touchBar';
 import { createDockMenu } from './electron/dockMenu';
 import { registerGlobalShortcut } from './electron/globalShortcut';
 import { autoUpdater } from 'electron-updater';
+import { createMacAppUpdater } from './electron/macUpdate';
 import { createLinuxAppImageUpdater } from './electron/linuxAppImageUpdate';
 import {
   createWindowsInstallerUpdater,
@@ -511,6 +512,25 @@ class Background {
         this.updateCheckTimer.unref();
       }
       this.windowsInstallerUpdater.check();
+      return;
+    }
+    if (isMac) {
+      if (!this.macAppUpdater) {
+        this.macAppUpdater = createMacAppUpdater({
+          app,
+          dialog,
+          log,
+          fetchRelease: (...args) => net.fetch(...args),
+          currentApp: path.resolve(process.resourcesPath, '../..'),
+          cacheDir: path.join(app.getPath('cache'), 'yesplaymusic-updater-mac'),
+        });
+        this.updateCheckTimer = setInterval(
+          () => this.macAppUpdater.check(),
+          6 * 60 * 60 * 1000
+        );
+        this.updateCheckTimer.unref();
+      }
+      this.macAppUpdater.check();
       return;
     }
     this.checkTagUpdates();

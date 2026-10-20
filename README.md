@@ -39,7 +39,19 @@ AppImage 文件及其所在目录必须可写。推荐放在
 Windows、macOS 和 Linux 均直接根据 GitHub 正式版 Release 的 tag 检测更新，
 无需 `latest.yml` / `latest-linux.yml`。Linux 按架构选择 Release 中的 AppImage，
 并使用 GitHub API 提供的 SHA-256 摘要校验安装包；缺少摘要时拒绝安装。
-macOS 暂时仍通过提示前往对应版本页面下载。
+macOS 按 Intel / Apple 芯片架构选择 ZIP 更新附件，DMG 用于首次安装。
+
+### macOS 自动更新
+
+启动后及每 6 小时根据 Release tag 检查并自动下载对应架构 ZIP，校验 GitHub
+SHA-256。选择“重启并更新”后验证 `.app` 的签名、Bundle ID、版本及 Mach-O
+架构，退出再替换应用并重新打开。Developer ID 签名的应用必须保持原团队；
+当前 ad-hoc 构建也会验证签名完整性，不会重新签名或移除 quarantine。
+旧应用保存在安装目录旁的隐藏 `.yesplaymusic-update-*` 目录；替换或启动请求失败
+会恢复旧应用。启动请求成功不代表后续应用崩溃也会自动回滚。
+应用和所在目录必须可写；建议安装在 `~/Applications`，如 `/Applications`
+不可写请先手动移动。直接从 DMG 或 App Translocation 运行时需先安装再更新。
+选择“稍后”不会安装。旧版仍需手动安装一次新版以启用此功能。
 
 ### Windows 安装版自动更新
 

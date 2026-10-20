@@ -72,6 +72,10 @@ jobs:
         if: runner.os == 'Windows'
         run: npm run test:windows-update-integration
 
+      - name: Verify native macOS update staging and signatures
+        if: runner.os == 'macOS'
+        run: npm run test:mac-update-native
+
       - name: Install dmg-license (macOS)
         if: runner.os == 'macOS'
         run: ${{ env.YARN_INSTALL_NOPT }} dmg-license
@@ -115,6 +119,7 @@ jobs:
           name: YesPlayMusic-${{ matrix.name }}
           path: |
             dist_electron/*.dmg
+            dist_electron/*-mac-*.zip
             dist_electron/*.exe
             dist_electron/*.AppImage
           if-no-files-found: error

@@ -73,7 +73,7 @@ function createDownloadedUpdateController({
         });
         if (result.response === 0) {
           await beforeInstall();
-          updater.quitAndInstall(false, true);
+          await updater.quitAndInstall(false, true);
         }
       } catch (error) {
         await reportDownloadFailure(error);

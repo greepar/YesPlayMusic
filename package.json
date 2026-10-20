@@ -1,6 +1,6 @@
 {
   "name": "yesplaymusic",
-  "version": "0.6.19",
+  "version": "0.6.20",
   "private": true,
   "description": "A third party music player for Netease Music",
   "author": "qier222<qier222@outlook.com>",
@@ -9,8 +9,9 @@
     "build": "vue-cli-service build",
     "lint": "vue-cli-service lint",
     "test:electron-window": "node --test tests/waylandWindow.test.cjs",
-    "test:electron-update": "node --test tests/linuxAppImageUpdate.test.cjs tests/windowsUpdate.test.cjs",
+    "test:electron-update": "node --test tests/linuxAppImageUpdate.test.cjs tests/windowsUpdate.test.cjs tests/macUpdate.test.cjs",
     "test:electron-update-integration": "node tests/linuxAppImageUpdate.integration.cjs",
+    "test:mac-update-native": "node tests/macUpdate.native.cjs",
     "test:windows-update-integration": "node tests/windowsUpdate.integration.cjs",
     "electron:build": "vue-cli-service electron:build -p never",
     "electron:build-all": "vue-cli-service electron:build -p never -mwl",

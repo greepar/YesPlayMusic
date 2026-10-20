@@ -82,6 +82,22 @@ function windowsUpdateInfo(
   return info;
 }
 
+function macUpdateInfo(
+  release,
+  arch,
+  repositoryUrl = 'https://github.com/greepar/YesPlayMusic'
+) {
+  const version = releaseVersion(release);
+  if (!['x64', 'arm64'].includes(arch))
+    throw new Error(`不支持自动更新的 macOS 架构：${arch}`);
+  return releaseAssetUpdateInfo(
+    release,
+    [`YesPlayMusic-mac-${version}-${arch}.zip`],
+    `macOS ${arch} ZIP`,
+    repositoryUrl
+  );
+}
+
 function releaseAssetUpdateInfo(release, names, description, repositoryUrl) {
   const version = releaseVersion(release);
   const asset = names
@@ -123,4 +139,5 @@ module.exports = {
   latestRelease,
   appImageUpdateInfo,
   windowsUpdateInfo,
+  macUpdateInfo,
 };
