@@ -74,7 +74,10 @@ jobs:
 
       - name: Verify native macOS update staging and signatures
         if: runner.os == 'macOS'
-        run: npm run test:mac-update-native
+        run: |
+          npm run test:mac-update-native
+          node node_modules/electron/install.js
+          npm run test:mac-update-electron
 
       - name: Install dmg-license (macOS)
         if: runner.os == 'macOS'

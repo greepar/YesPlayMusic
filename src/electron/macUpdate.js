@@ -1,5 +1,10 @@
-const fs = require('node:fs/promises');
-const { createReadStream, createWriteStream, constants } = require('node:fs');
+// Bundle operations must treat app.asar as a physical file. Electron's patched
+// fs traverses it as a virtual directory and recursive removal fails ENOTEMPTY.
+const nativeFs = process.versions.electron
+  ? require('original-fs')
+  : require('node:fs');
+const fs = nativeFs.promises;
+const { createReadStream, createWriteStream, constants } = nativeFs;
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { EventEmitter } = require('node:events');

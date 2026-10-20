@@ -12,6 +12,7 @@
     "test:electron-update": "node --test tests/linuxAppImageUpdate.test.cjs tests/windowsUpdate.test.cjs tests/macUpdate.test.cjs",
     "test:electron-update-integration": "node tests/linuxAppImageUpdate.integration.cjs",
     "test:mac-update-native": "node tests/macUpdate.native.cjs",
+    "test:mac-update-electron": "electron tests/macUpdate.native.cjs",
     "test:windows-update-integration": "node tests/windowsUpdate.integration.cjs",
     "electron:build": "vue-cli-service electron:build -p never",
     "electron:build-all": "vue-cli-service electron:build -p never -mwl",
