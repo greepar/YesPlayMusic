@@ -342,6 +342,8 @@ public static class YpmPortableLock {
               windowsHide: true,
               env: {
                 ...process.env,
+                // Reproduce launch from a shell with an incompatible module path.
+                PSModulePath: path.join(root, 'missing-modules'),
                 YPM_TEST_FAIL_LAUNCH: mode === 'launch-failure' ? '1' : '0',
               },
             }

@@ -6,6 +6,9 @@ const WINDOWS_PORTABLE_INSTALL_SCRIPT = String.raw`param(
   [string]$Digest,
   [string]$Log
 )
+# A launcher can inherit PowerShell 7's module path. Resolve cmdlets from the
+# helper's own PowerShell installation, including on Windows PowerShell 5.1.
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
 $ErrorActionPreference = 'Stop'
 function Write-UpdateLog([string]$Message) {
   try { Add-Content -LiteralPath $Log -Value $Message } catch {}
