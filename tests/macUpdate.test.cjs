@@ -12,7 +12,11 @@ const {
   verifyMacBundle,
   MacAppUpdater,
   assertMacAppWritable,
+  cleanupMacUpdates,
 } = require('../src/electron/macUpdate');
+const {
+  createDownloadedUpdateController,
+} = require('../src/electron/downloadedUpdate');
 const { MAC_INSTALL_SCRIPT } = require('../src/electron/macInstallScript');
 function release() {
   return {
@@ -27,6 +31,211 @@ function release() {
   };
 }
 const temp = () => fs.mkdtemp(path.join(os.tmpdir(), 'ypm-mac-test-'));
+const tick = () => new Promise(resolve => setImmediate(resolve));
+const {
+  createUpdateCheckScheduler,
+} = require('../src/electron/updateScheduler');
+
+test('disabled automatic checks schedule no requests; toggling takes effect immediately', () => {
+  let enabled = false;
+  let checks = 0;
+  let timerCallback;
+  let timers = 0;
+  let cancelled = 0;
+  const scheduler = createUpdateCheckScheduler({
+    enabled: () => enabled,
+    check: () => {
+      checks++;
+    },
+    setTimer(callback) {
+      timers++;
+      timerCallback = callback;
+      return { unref() {} };
+    },
+    clearTimer() {
+      cancelled++;
+    },
+  });
+  scheduler.refresh();
+  assert.equal(checks, 0);
+  assert.equal(timers, 0);
+  enabled = true;
+  scheduler.refresh();
+  assert.equal(checks, 1);
+  timerCallback();
+  assert.equal(checks, 2);
+  enabled = false;
+  scheduler.refresh();
+  timerCallback(); // Even an already queued callback must respect the switch.
+  assert.equal(checks, 2);
+  assert.equal(cancelled, 1);
+  scheduler.stop();
+});
+
+test('turning off auto checks suppresses pending notifications, but manual checks still prompt', async () => {
+  const updater = new EventEmitter();
+  let autoEnabled = true;
+  let finish;
+  let prompts = 0;
+  updater.checkForUpdates = () =>
+    new Promise(resolve => {
+      finish = () => {
+        updater.emit('update-available', { version: '1.0.1' });
+        resolve();
+      };
+    });
+  const controller = createDownloadedUpdateController({
+    updater,
+    confirmBeforeDownload: true,
+    canNotify: () => autoEnabled,
+    log() {},
+    dialog: {
+      async showMessageBox() {
+        prompts++;
+        return { response: 1 };
+      },
+    },
+  });
+  const automatic = controller.check();
+  await tick();
+  autoEnabled = false;
+  finish();
+  await automatic;
+  assert.equal(prompts, 0);
+  const manual = controller.check({ manual: true });
+  await tick();
+  finish();
+  const result = await manual;
+  await tick();
+  assert.equal(prompts, 1);
+  assert.equal(result.status, 'available');
+  assert.equal(result.version, '1.0.1');
+});
+
+test('manual checks distinguish latest version from network failure without error popups', async () => {
+  const updater = new EventEmitter();
+  let dialogs = 0;
+  const controller = createDownloadedUpdateController({
+    updater,
+    log() {},
+    dialog: {
+      async showMessageBox() {
+        dialogs++;
+      },
+    },
+  });
+  updater.checkForUpdates = async () => null;
+  assert.equal((await controller.check({ manual: true })).status, 'up-to-date');
+  updater.checkForUpdates = async () => {
+    throw new Error('offline');
+  };
+  const result = await controller.check({ manual: true });
+  assert.equal(result.status, 'error');
+  assert.equal(result.message, 'offline');
+  assert.equal(dialogs, 0);
+});
+
+test('mac asks before downloading; later and unapproved events never download or install', async () => {
+  const updater = new EventEmitter();
+  let answer;
+  let downloads = 0;
+  let installs = 0;
+  const prompts = [];
+  updater.downloadUpdate = async () => {
+    downloads++;
+    updater.emit('update-downloaded', { version: '1.0.1' });
+  };
+  updater.quitAndInstall = async () => {
+    installs++;
+  };
+  createDownloadedUpdateController({
+    updater,
+    confirmBeforeDownload: true,
+    log() {},
+    dialog: {
+      showMessageBox(options) {
+        prompts.push(options);
+        return new Promise(resolve => {
+          answer = resolve;
+        });
+      },
+    },
+  });
+  updater.emit('update-downloaded', { version: '1.0.1' });
+  assert.equal(installs, 0);
+  updater.emit('update-available', { version: '1.0.1' });
+  updater.emit('update-available', { version: '1.0.1' });
+  await tick();
+  assert.equal(prompts.length, 1);
+  assert.equal(downloads, 0);
+  answer({ response: 1 });
+  await tick();
+  assert.equal(downloads, 0);
+  assert.equal(installs, 0);
+  updater.emit('update-available', { version: '1.0.1' });
+  answer({ response: 0 });
+  await tick();
+  assert.equal(downloads, 1);
+  assert.equal(installs, 1);
+  assert.equal(prompts.length, 2); // One consent dialog, no second restart prompt.
+});
+
+test('startup cleanup only removes the successfully launched transaction for this app and version', async () =>
+  withDir(async dir => {
+    const target = path.join(dir, 'Music.app');
+    const cacheDir = path.join(dir, 'cache');
+    await fs.mkdir(target);
+    await fs.mkdir(cacheDir);
+    const currentApp = await fs.realpath(target);
+    const script = `install-${crypto.randomUUID()}.sh`;
+    const archive = path.join(cacheDir, 'YesPlayMusic-1.0.1-arm64.zip');
+    await fs.writeFile(archive, 'archive');
+    await fs.writeFile(path.join(cacheDir, script), 'script');
+    const unrelated = path.join(cacheDir, 'YesPlayMusic-1.0.2-arm64.zip');
+    await fs.writeFile(unrelated, 'newer download');
+    for (const [name, changes, launched] of [
+      ['matching', {}, true],
+      ['not-launched', {}, false],
+      ['other-app', { target: path.join(dir, 'Other.app') }, true],
+      ['other-version', { version: '1.0.2' }, true],
+    ]) {
+      const stage = path.join(dir, `.yesplaymusic-update-${name}`);
+      await fs.mkdir(path.join(stage, 'Previous.app'), { recursive: true });
+      await fs.writeFile(
+        path.join(stage, 'pending-update.json'),
+        JSON.stringify({
+          format: 1,
+          target: currentApp,
+          version: '1.0.1',
+          arch: 'arm64',
+          script,
+          ...changes,
+        })
+      );
+      if (launched)
+        await fs.writeFile(path.join(stage, 'launch-succeeded'), '');
+    }
+    await cleanupMacUpdates({ currentApp, cacheDir, version: '1.0.0' });
+    assert.ok(await fs.stat(archive));
+    await cleanupMacUpdates({ currentApp, cacheDir, version: '1.0.1' });
+    for (const name of ['matching'])
+      await assert.rejects(
+        fs.stat(path.join(dir, `.yesplaymusic-update-${name}`)),
+        { code: 'ENOENT' }
+      );
+    for (const name of ['not-launched', 'other-app', 'other-version'])
+      assert.ok(
+        await fs.stat(
+          path.join(dir, `.yesplaymusic-update-${name}/Previous.app`)
+        )
+      );
+    await assert.rejects(fs.stat(archive), { code: 'ENOENT' });
+    await assert.rejects(fs.stat(path.join(cacheDir, script)), {
+      code: 'ENOENT',
+    });
+    assert.ok(await fs.stat(unrelated));
+    assert.ok(await fs.stat(target));
+  }));
 async function withDir(action) {
   const dir = await temp();
   try {
@@ -58,12 +267,17 @@ test('streamed download validates size and digest and rejects corrupted archives
       sha2: crypto.createHash('sha256').update(bytes).digest('hex'),
     };
     const destination = path.join(dir, 'update.zip');
+    const progress = [];
     let downloads = 0;
     const fetchRelease = async () => {
       downloads++;
       return new Response(bytes);
     };
-    await downloadMacArchive(fetchRelease, asset, destination);
+    await downloadMacArchive(fetchRelease, asset, destination, p =>
+      progress.push(p)
+    );
+    assert.equal(progress.at(-1).percent, 100);
+    assert.equal(progress.at(-1).transferred, bytes.length);
     await downloadMacArchive(fetchRelease, asset, destination);
     assert.equal(downloads, 1);
     assert.deepEqual(await fs.readFile(destination), bytes);

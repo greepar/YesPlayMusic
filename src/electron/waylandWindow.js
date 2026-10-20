@@ -32,6 +32,7 @@ class WaylandWindow extends EventEmitter {
     this.host = host;
     host.contentView.addChildView(this.view);
     host.setMenuBarVisibility(this.menuBarVisible);
+    if (this.progressBar) host.setProgressBar(...this.progressBar);
     const resizeView = () => {
       const { width, height } = host.getContentBounds();
       if (width > 0 && height > 0)
@@ -100,6 +101,11 @@ class WaylandWindow extends EventEmitter {
   setMenuBarVisibility(visible) {
     this.menuBarVisible = visible;
     this.host.setMenuBarVisibility(visible);
+  }
+
+  setProgressBar(progress, options) {
+    this.progressBar = [progress, options];
+    this.host.setProgressBar(progress, options);
   }
 
   show() {

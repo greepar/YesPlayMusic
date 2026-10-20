@@ -89,13 +89,23 @@ export function initIpcMain(
   store,
   trayEventEmitter,
   audioWindow,
-  uiLocks
+  uiLocks,
+  updates
 ) {
   const pendingPlayerCommands = new Map();
   const completedPlayerCommands = new Map();
   const isUiSender = event => event.sender.id === win?.webContents.id;
   const isAudioSender = event =>
     event.sender.id === audioWindow?.webContents.id;
+
+  ipcMain.handle('updates:check', event => {
+    if (!isUiSender(event)) return { status: 'unavailable' };
+    return updates?.check() || { status: 'unavailable' };
+  });
+  ipcMain.handle('updates:progress:get', event => {
+    if (!isUiSender(event)) return { phase: 'idle', percent: 0 };
+    return updates?.getProgress() || { phase: 'idle', percent: 0 };
+  });
 
   ipcMain.on('ui:activity-lock', (event, action) => {
     if (!isUiSender(event)) return;
@@ -234,7 +244,12 @@ export function initIpcMain(
   });
 
   ipcMain.on('settings', (event, options) => {
+    if (!isUiSender(event)) return;
+    const autoCheckChanged =
+      (store.get('settings.autoCheckUpdates') !== false) !==
+      (options.autoCheckUpdates !== false);
     store.set('settings', options);
+    if (autoCheckChanged) updates?.configure();
     audioWindow?.webContents.send('settings-sync', options);
     if (options.enableGlobalShortcut) {
       registerGlobalShortcut(win, store, audioWindow);

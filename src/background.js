@@ -34,7 +34,9 @@ import { createTouchBar } from './electron/touchBar';
 import { createDockMenu } from './electron/dockMenu';
 import { registerGlobalShortcut } from './electron/globalShortcut';
 import { autoUpdater } from 'electron-updater';
-import { createMacAppUpdater } from './electron/macUpdate';
+import { createMacAppUpdater, cleanupMacUpdates } from './electron/macUpdate';
+import { createUpdateCheckScheduler } from './electron/updateScheduler';
+import { createUpdateProgress } from './electron/updateProgress';
 import { createLinuxAppImageUpdater } from './electron/linuxAppImageUpdate';
 import {
   createWindowsInstallerUpdater,
@@ -151,6 +153,10 @@ const closeOnLinux = (e, win, store) => {
 class Background {
   constructor() {
     this.window = null;
+    this.updateProgress = createUpdateProgress({
+      getWindow: () => this.window || (isMac ? this.audioWindow : null),
+      log,
+    });
     this.windowFacade = new RebuildableWindow(this);
     this.audioWindow = null;
     this.audioFacade = new RebuildableAudioWindow(this);
@@ -372,6 +378,36 @@ class Background {
     this.uiReleaseTimer = null;
   }
 
+  scheduleMacUpdateCleanup() {
+    if (
+      !isMac ||
+      isDevelopment ||
+      !this.macAppInitialized ||
+      !this.macUiLoaded ||
+      this.macCleanupTimer
+    )
+      return;
+    // Give the relaunched app time to finish startup before releasing rollback
+    // files. The installer also marks that LaunchServices accepted the launch.
+    this.macCleanupTimer = setTimeout(() => {
+      if (
+        !this.window ||
+        this.window.isDestroyed() ||
+        this.window.webContents.isCrashed()
+      ) {
+        this.macCleanupTimer = null;
+        return;
+      }
+      cleanupMacUpdates({
+        currentApp: path.resolve(process.resourcesPath, '../..'),
+        cacheDir: path.join(app.getPath('cache'), 'yesplaymusic-updater-mac'),
+        version: app.getVersion(),
+        log,
+      }).catch(error => log(`macOS update cleanup deferred: ${error.message}`));
+    }, 5000);
+    this.macCleanupTimer.unref();
+  }
+
   scheduleUiRelease() {
     this.cancelUiRelease();
     if (this.store.get('settings.disableUiAutoRelease') === true) return;
@@ -387,6 +423,7 @@ class Background {
     const win = this.window;
     if (!win || win.isDestroyed() || win.isVisible()) return;
     if (this.uiActivityLocks > 0) return this.scheduleUiRelease();
+    if (this.updateProgress.isActive()) return this.scheduleUiRelease();
     try {
       const state = await win.webContents.executeJavaScript(`({
         route: location.hash || '#/',
@@ -468,11 +505,13 @@ class Background {
     );
   }
 
-  checkForUpdates() {
-    if (isDevelopment) return;
+  checkForUpdates({ manual = false } = {}) {
+    if (isDevelopment) return { status: 'unavailable' };
+    if (!manual && this.store.get('settings.autoCheckUpdates') === false)
+      return { status: 'disabled' };
     log('checkForUpdates');
     if (isLinux) {
-      if (!process.env.APPIMAGE) return;
+      if (!process.env.APPIMAGE) return this.checkTagUpdates({ manual });
       if (!this.linuxAppImageUpdater) {
         autoUpdater.setFeedURL({
           provider: 'custom',
@@ -483,15 +522,12 @@ class Background {
           updater: autoUpdater,
           dialog,
           log,
+          onProgress: state => this.updateProgress.report(state),
+          canNotify: () =>
+            this.store.get('settings.autoCheckUpdates') !== false,
         });
-        this.updateCheckTimer = setInterval(
-          () => this.linuxAppImageUpdater.check(),
-          6 * 60 * 60 * 1000
-        );
-        this.updateCheckTimer.unref();
       }
-      this.linuxAppImageUpdater.check();
-      return;
+      return this.linuxAppImageUpdater.check({ manual });
     }
     if (isWindows && !isPortableWindows()) {
       if (!this.windowsInstallerUpdater) {
@@ -504,15 +540,12 @@ class Background {
           updater: autoUpdater,
           dialog,
           log,
+          onProgress: state => this.updateProgress.report(state),
+          canNotify: () =>
+            this.store.get('settings.autoCheckUpdates') !== false,
         });
-        this.updateCheckTimer = setInterval(
-          () => this.windowsInstallerUpdater.check(),
-          6 * 60 * 60 * 1000
-        );
-        this.updateCheckTimer.unref();
       }
-      this.windowsInstallerUpdater.check();
-      return;
+      return this.windowsInstallerUpdater.check({ manual });
     }
     if (isMac) {
       if (!this.macAppUpdater) {
@@ -520,26 +553,28 @@ class Background {
           app,
           dialog,
           log,
+          onProgress: state => this.updateProgress.report(state),
+          canNotify: () =>
+            this.store.get('settings.autoCheckUpdates') !== false,
           fetchRelease: (...args) => net.fetch(...args),
           currentApp: path.resolve(process.resourcesPath, '../..'),
           cacheDir: path.join(app.getPath('cache'), 'yesplaymusic-updater-mac'),
         });
-        this.updateCheckTimer = setInterval(
-          () => this.macAppUpdater.check(),
-          6 * 60 * 60 * 1000
-        );
-        this.updateCheckTimer.unref();
       }
-      this.macAppUpdater.check();
-      return;
+      return this.macAppUpdater.check({ manual });
     }
-    this.checkTagUpdates();
+    return this.checkTagUpdates({ manual });
   }
 
-  async checkTagUpdates() {
+  async checkTagUpdates({ manual = false } = {}) {
+    this.updateProgress.report({ phase: 'checking' });
     try {
       const info = await latestRelease((...args) => net.fetch(...args));
-      if (!isNewerVersion(info.version, app.getVersion())) return;
+      if (!manual && this.store.get('settings.autoCheckUpdates') === false)
+        return { status: 'disabled' };
+      if (!isNewerVersion(info.version, app.getVersion()))
+        return { status: 'up-to-date' };
+      this.updateProgress.report({ phase: 'available', version: info.version });
       const result = await dialog.showMessageBox({
         title: `发现新版本 v${info.version}`,
         message: `发现新版本 v${info.version}`,
@@ -554,8 +589,16 @@ class Background {
           `https://github.com/greepar/YesPlayMusic/releases/tag/${encodeURIComponent(info.tag_name)}`
         );
       }
+      return { status: 'available', version: info.version };
     } catch (error) {
       log(`update check skipped: ${error.message}`);
+      this.updateProgress.report({ phase: 'error', message: error.message });
+      return { status: 'error', message: error.message };
+    } finally {
+      if (
+        ['checking', 'available'].includes(this.updateProgress.getState().phase)
+      )
+        this.updateProgress.report({ phase: 'idle' });
     }
   }
 
@@ -564,6 +607,7 @@ class Background {
     win.once('ready-to-show', () => {
       log('window ready-to-show event');
       win.show();
+      this.updateProgress.restore();
       this.store.set('window', win.getBounds());
       const state = this.store.get('uiState');
       if (state) win.webContents.send('ui:restore-state', state);
@@ -631,8 +675,18 @@ class Background {
       setWindowRenderingSuspended(win, false);
     });
 
-    win.webContents.on('did-finish-load', () => {
+    win.webContents.on('did-finish-load', async () => {
       setWindowRenderingSuspended(win, !win.isVisible() || win.isMinimized());
+      if (isMac && !isDevelopment) {
+        try {
+          this.macUiLoaded = await win.webContents.executeJavaScript(
+            'Boolean(window.__YESPLAYMUSIC_STORE__)'
+          );
+          this.scheduleMacUpdateCleanup();
+        } catch (error) {
+          log(`macOS startup confirmation deferred: ${error.message}`);
+        }
+      }
     });
 
     openExternalLinksInBrowser(win, log);
@@ -691,6 +745,11 @@ class Background {
             )
               this.scheduleUiRelease();
           },
+        },
+        {
+          check: () => this.checkForUpdates({ manual: true }),
+          configure: () => this.updateScheduler?.refresh(),
+          getProgress: () => this.updateProgress.getState(),
         }
       );
 
@@ -703,7 +762,11 @@ class Background {
       }
 
       // check for updates
-      this.checkForUpdates();
+      this.updateScheduler = createUpdateCheckScheduler({
+        check: () => this.checkForUpdates(),
+        enabled: () => this.store.get('settings.autoCheckUpdates') !== false,
+      });
+      this.updateScheduler.refresh();
 
       // create menu
       createMenu(this.windowFacade, this.store, this.audioFacade);
@@ -751,6 +814,8 @@ class Background {
       powerMonitor.on('resume', () => {
         this.audioFacade.webContents.send('system-resume');
       });
+      this.macAppInitialized = true;
+      this.scheduleMacUpdateCleanup();
     });
 
     app.on('activate', () => {
@@ -767,7 +832,8 @@ class Background {
     });
 
     app.on('before-quit', () => {
-      clearInterval(this.updateCheckTimer);
+      this.updateScheduler?.stop();
+      clearTimeout(this.macCleanupTimer);
       this.willQuitApp = true;
       this.isQuitting = true;
       this.audioWindow?.destroy();

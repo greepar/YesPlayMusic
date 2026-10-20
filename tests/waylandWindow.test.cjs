@@ -17,15 +17,34 @@ function fixture(backend = 'wayland') {
       };
       hosts.push(this);
     }
-    getBounds() { return this.bounds; }
-    getContentBounds() { return this.bounds; }
-    isMaximized() { return false; }
-    isFullScreen() { return false; }
-    isDestroyed() { return !!this.destroyed; }
-    isMinimized() { return false; }
+    getBounds() {
+      return this.bounds;
+    }
+    getContentBounds() {
+      return this.bounds;
+    }
+    isMaximized() {
+      return false;
+    }
+    isFullScreen() {
+      return false;
+    }
+    isDestroyed() {
+      return !!this.destroyed;
+    }
+    isMinimized() {
+      return false;
+    }
     setMenuBarVisibility() {}
-    show() { this.emit('show'); }
-    hide() { this.emit('hide'); }
+    setProgressBar(value) {
+      this.progress = value;
+    }
+    show() {
+      this.emit('show');
+    }
+    hide() {
+      this.emit('hide');
+    }
     destroy() {
       this.destroyed = true;
       this.emit('closed');
@@ -36,15 +55,25 @@ function fixture(backend = 'wayland') {
       this.webContents = new EventEmitter();
       Object.assign(this.webContents, {
         closes: 0,
-        isDestroyed() { return this.closes > 0; },
-        close() { this.closes += 1; },
+        isDestroyed() {
+          return this.closes > 0;
+        },
+        close() {
+          this.closes += 1;
+        },
         focusRequests: 0,
-        focus() { this.focusRequests += 1; },
-        loadURL(url) { this.url = url; },
+        focus() {
+          this.focusRequests += 1;
+        },
+        loadURL(url) {
+          this.url = url;
+        },
       });
     }
     setBackgroundColor() {}
-    setBounds(bounds) { this.bounds = bounds; }
+    setBounds(bounds) {
+      this.bounds = bounds;
+    }
   }
   class BrowserWindow {}
   const electron = {
@@ -56,14 +85,29 @@ function fixture(backend = 'wayland') {
   const context = {
     module: { exports: {} },
     process: { platform: 'linux' },
-    require: name => name === 'electron' ? electron : require(name),
+    require: name => (name === 'electron' ? electron : require(name)),
   };
   vm.runInNewContext(
-    fs.readFileSync(path.join(__dirname, '../src/electron/waylandWindow.js'), 'utf8'),
+    fs.readFileSync(
+      path.join(__dirname, '../src/electron/waylandWindow.js'),
+      'utf8'
+    ),
     context
   );
   return { ...context.module.exports, hosts, BrowserWindow };
 }
+
+test('Wayland restores taskbar progress when its native host is remapped', () => {
+  const f = fixture();
+  const win = f.createMainWindow({ width: 800, height: 600 });
+  win.show();
+  win.setProgressBar(0.42);
+  win.show();
+  assert.equal(f.hosts.at(-1).progress, 0.42);
+  win.setProgressBar(-1);
+  win.show();
+  assert.equal(f.hosts.at(-1).progress, -1);
+});
 
 test('only native Wayland uses the persistent web view', () => {
   const f = fixture('x11');
@@ -79,7 +123,12 @@ test('tray hide/show retains the renderer and forwards close cancellation', () =
   win.once('ready-to-show', () => ready++);
   renderer.emit('did-finish-load');
   win.show();
-  const event = { prevented: false, preventDefault() { this.prevented = true; } };
+  const event = {
+    prevented: false,
+    preventDefault() {
+      this.prevented = true;
+    },
+  };
   win.on('close', e => e.preventDefault());
   f.hosts[0].emit('close', event);
   assert.equal(event.prevented, true);

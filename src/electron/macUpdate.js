@@ -42,13 +42,20 @@ async function hashFile(file) {
   return hash.digest('hex');
 }
 
-async function downloadMacArchive(fetchRelease, asset, destination) {
+async function downloadMacArchive(
+  fetchRelease,
+  asset,
+  destination,
+  onProgress = () => {}
+) {
   try {
     if (
       (await fs.stat(destination)).size === asset.size &&
       (await hashFile(destination)) === asset.sha2
-    )
+    ) {
+      onProgress({ percent: 100, transferred: asset.size, total: asset.size });
       return;
+    }
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
@@ -60,6 +67,8 @@ async function downloadMacArchive(fetchRelease, asset, destination) {
     if (!response.ok || !response.body)
       throw new Error(`更新下载失败（HTTP ${response.status}）`);
     let received = 0;
+    let lastProgress = 0;
+    const started = Date.now();
     const hash = crypto.createHash('sha256');
     const verify = new Transform({
       transform(chunk, encoding, callback) {
@@ -67,6 +76,16 @@ async function downloadMacArchive(fetchRelease, asset, destination) {
         if (received > asset.size)
           return callback(new Error('更新文件大小超出 Release 附件记录。'));
         hash.update(chunk);
+        const now = Date.now();
+        if (now - lastProgress >= 200 || received === asset.size) {
+          lastProgress = now;
+          onProgress({
+            percent: (received / asset.size) * 100,
+            transferred: received,
+            total: asset.size,
+            bytesPerSecond: (received * 1000) / Math.max(1, now - started),
+          });
+        }
         callback(null, chunk);
       },
     });
@@ -180,6 +199,55 @@ async function stageMacBundle(archive, options) {
   }
 }
 
+async function cleanupMacUpdates({
+  currentApp,
+  cacheDir,
+  version,
+  log = () => {},
+}) {
+  const target = await fs.realpath(currentApp);
+  const parent = path.dirname(target);
+  for (const entry of await fs.readdir(parent, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith('.yesplaymusic-update-'))
+      continue;
+    const stage = path.join(parent, entry.name);
+    try {
+      const receipt = JSON.parse(
+        await fs.readFile(path.join(stage, 'pending-update.json'), 'utf8')
+      );
+      if (
+        receipt.format !== 1 ||
+        receipt.target !== target ||
+        receipt.version !== version ||
+        !/^\d+\.\d+\.\d+$/.test(version) ||
+        !['arm64', 'x64'].includes(receipt.arch) ||
+        !/^install-[a-f0-9-]{36}\.sh$/.test(receipt.script)
+      )
+        continue;
+      const launched = await fs.lstat(path.join(stage, 'launch-succeeded'));
+      const backup = await fs.lstat(path.join(stage, 'Previous.app'));
+      if (
+        !launched.isFile() ||
+        !backup.isDirectory() ||
+        backup.isSymbolicLink()
+      )
+        continue;
+      // Only this completed transaction is removed; never sweep other apps or
+      // newer downloads in the shared updater cache.
+      await fs.rm(
+        path.join(cacheDir, `YesPlayMusic-${version}-${receipt.arch}.zip`),
+        { force: true }
+      );
+      await fs.rm(path.join(cacheDir, receipt.script), { force: true });
+      await fs.rm(stage, { recursive: true });
+      log(`Removed previous macOS app and update cache for ${version}`);
+    } catch (error) {
+      if (error.code !== 'ENOENT')
+        log(`macOS update cleanup deferred: ${error.message}`);
+    }
+  }
+}
+
 class MacAppUpdater extends EventEmitter {
   constructor({
     app,
@@ -218,7 +286,9 @@ class MacAppUpdater extends EventEmitter {
       this.cacheDir,
       `YesPlayMusic-${this.info.version}-${this.arch}.zip`
     );
-    await downloadMacArchive(this.fetchRelease, asset, this.archive);
+    await downloadMacArchive(this.fetchRelease, asset, this.archive, progress =>
+      this.emit('download-progress', progress)
+    );
     this.emit('update-downloaded', this.info);
     return [this.archive];
   }
@@ -242,6 +312,17 @@ class MacAppUpdater extends EventEmitter {
       `install-${crypto.randomUUID()}.sh`
     );
     const log = path.join(this.cacheDir, 'last-install.log');
+    await fs.writeFile(
+      path.join(path.dirname(staged), 'pending-update.json'),
+      JSON.stringify({
+        format: 1,
+        target: currentApp,
+        version: this.info.version,
+        arch: this.arch,
+        script: path.basename(script),
+      }),
+      { mode: 0o600, flag: 'wx' }
+    );
     await fs.writeFile(script, MAC_INSTALL_SCRIPT, { mode: 0o700, flag: 'wx' });
     await new Promise((resolve, reject) => {
       const child = this.launchHelper(
@@ -275,8 +356,9 @@ function createMacAppUpdater(options) {
     dialog: options.dialog,
     log: options.log,
     platformName: 'macOS',
-    installDetail:
-      '重启将替换 YesPlayMusic 应用并中断播放。旧版会保留备份；选择“稍后”可继续使用。',
+    confirmBeforeDownload: true,
+    canNotify: options.canNotify,
+    onProgress: options.onProgress,
   });
 }
 module.exports = {
@@ -284,6 +366,7 @@ module.exports = {
   downloadMacArchive,
   verifyMacBundle,
   stageMacBundle,
+  cleanupMacUpdates,
   MacAppUpdater,
   createMacAppUpdater,
 };

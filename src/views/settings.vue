@@ -244,7 +244,9 @@
       </div>
       <div class="item">
         <div class="left">
-          <div class="title">{{ $t('settings.download.askBeforeDownload') }}</div>
+          <div class="title">{{
+            $t('settings.download.askBeforeDownload')
+          }}</div>
         </div>
         <div class="right">
           <div class="toggle">
@@ -264,15 +266,19 @@
           <div class="description">{{ currentDownloadPathDisplay }}</div>
         </div>
         <div class="right">
-          <button @click="changeDownloadPath">{{ $t('settings.download.changePath') }}</button>
+          <button @click="changeDownloadPath">{{
+            $t('settings.download.changePath')
+          }}</button>
           <button
             v-if="settings.downloadPath"
-            style="margin-left: 10px;"
+            style="margin-left: 10px"
             @click="resetDownloadPath"
           >
             {{ $t('settings.download.resetDefault') || '恢复默认' }}
           </button>
-          <button style="margin-left: 10px;" @click="openDownloadPath">{{ $t('settings.download.openFolder') }}</button>
+          <button style="margin-left: 10px" @click="openDownloadPath">{{
+            $t('settings.download.openFolder')
+          }}</button>
         </div>
       </div>
 
@@ -583,6 +589,54 @@
       </div>
 
       <div v-if="isElectron">
+        <h3>软件更新</h3>
+        <div class="item">
+          <div class="left">
+            <div class="title">自动检查更新</div>
+            <div class="description"
+              >启动后及每 6 小时检查，发现新版时提示。关闭后仍可手动检查。</div
+            >
+          </div>
+          <div class="right">
+            <div class="toggle">
+              <input
+                id="auto-check-updates"
+                v-model="autoCheckUpdates"
+                type="checkbox"
+                aria-label="自动检查更新"
+              />
+              <label for="auto-check-updates"></label>
+            </div>
+          </div>
+        </div>
+        <div class="item">
+          <div class="left">
+            <div class="title">当前版本 v{{ version }}</div>
+            <div class="description" role="status" aria-live="polite">{{
+              updateProgressMessage ||
+              updateCheckMessage ||
+              '发现新版后，可选择是否下载并安装。'
+            }}</div>
+            <progress
+              v-if="updateProgressActive"
+              class="update-progress"
+              max="100"
+              :value="
+                updateProgress.phase === 'downloading'
+                  ? updateProgress.percent
+                  : undefined
+              "
+              aria-label="更新进度"
+            />
+          </div>
+          <div class="right">
+            <button
+              :disabled="checkingForUpdates || updateProgressActive"
+              @click="checkForUpdates"
+              >{{ checkingForUpdates ? '正在检查…' : '检查更新' }}</button
+            >
+          </div>
+        </div>
         <h3>快捷键</h3>
         <div class="item">
           <div class="left">
@@ -728,9 +782,29 @@ export default {
       recordedShortcut: [],
       outputDevicesLoaded: false,
       outputDevicesRequest: null,
+      checkingForUpdates: false,
+      updateCheckMessage: '',
+      updateProgress: { phase: 'idle', percent: 0 },
+      updateProgressListener: null,
     };
   },
   computed: {
+    updateProgressActive() {
+      return ['checking', 'downloading', 'installing'].includes(
+        this.updateProgress.phase
+      );
+    },
+    updateProgressMessage() {
+      const state = this.updateProgress;
+      if (state.phase === 'downloading')
+        return `正在下载更新 ${Math.floor(state.percent || 0)}%`;
+      if (state.phase === 'checking') return '正在检查更新…';
+      if (state.phase === 'installing') return '正在校验并安装更新，即将重启…';
+      if (state.phase === 'ready') return '更新已下载，等待重启安装。';
+      if (state.phase === 'error')
+        return `更新未完成：${state.message || '请稍后重试。'}`;
+      return '';
+    },
     ...mapState(['player', 'settings', 'data']),
     isElectron() {
       return isElectron;
@@ -896,7 +970,10 @@ export default {
       },
     },
     currentDownloadPathDisplay() {
-      if (this.settings.downloadPath && this.settings.downloadPath.trim() !== '') {
+      if (
+        this.settings.downloadPath &&
+        this.settings.downloadPath.trim() !== ''
+      ) {
         return this.settings.downloadPath;
       }
       return this.defaultDownloadDir || '下载文件夹/YesPlayMusic';
@@ -1071,6 +1148,17 @@ export default {
         });
       },
     },
+    autoCheckUpdates: {
+      get() {
+        return this.settings.autoCheckUpdates !== false;
+      },
+      set(value) {
+        this.$store.commit('updateSettings', {
+          key: 'autoCheckUpdates',
+          value,
+        });
+      },
+    },
     showLibraryDefault: {
       get() {
         return this.settings.showLibraryDefault || false;
@@ -1174,12 +1262,51 @@ export default {
     this.countDBSize();
     const ipc = getIpcRenderer();
     if (this.isElectron && ipc) {
+      this.updateProgressListener = (_event, state) => {
+        this.updateProgress = state;
+      };
+      ipc.on('updates:progress', this.updateProgressListener);
+      ipc
+        .invoke('updates:progress:get')
+        .then(state => {
+          this.updateProgress = state;
+        })
+        .catch(() => {});
       ipc.invoke('get-default-download-dir').then(dir => {
         this.defaultDownloadDir = dir;
       });
     }
   },
+  beforeUnmount() {
+    if (ipcRenderer && this.updateProgressListener)
+      ipcRenderer.removeListener(
+        'updates:progress',
+        this.updateProgressListener
+      );
+  },
   methods: {
+    async checkForUpdates() {
+      if (!ipcRenderer || this.checkingForUpdates) return;
+      this.checkingForUpdates = true;
+      this.updateCheckMessage = '正在检查更新…';
+      try {
+        const result = await ipcRenderer.invoke('updates:check');
+        const messages = {
+          'up-to-date': `当前已是最新版本（v${this.version}）`,
+          available: `发现新版本 v${result?.version || ''}`,
+          busy: '更新操作正在进行中，请稍候。',
+          unavailable: '当前运行环境暂不支持检查更新。',
+        };
+        this.updateCheckMessage =
+          result?.status === 'error'
+            ? `检查更新失败：${result.message || '请检查网络后重试。'}`
+            : messages[result?.status] || '未能检查更新，请稍后重试。';
+      } catch (error) {
+        this.updateCheckMessage = '检查更新失败，请稍后重试。';
+      } finally {
+        this.checkingForUpdates = false;
+      }
+    },
     ...mapActions(['showToast']),
     getAllOutputDevices() {
       if (
@@ -1488,6 +1615,15 @@ h3 {
   }
 }
 
+.update-progress {
+  display: block;
+  width: 260px;
+  max-width: 100%;
+  height: 8px;
+  margin-top: 12px;
+  accent-color: var(--color-primary);
+}
+
 select {
   min-width: 192px;
   max-width: 600px;
@@ -1627,8 +1763,11 @@ input[type='number'] {
   transition: 0.2s cubic-bezier(0.24, 0, 0.5, 1);
 }
 .afterAnimation {
-  box-shadow: 0 0 0 1px hsla(0, 0%, 0%, 0.1), 0 4px 0px 0 hsla(0, 0%, 0%, 0.04),
-    0 4px 9px hsla(0, 0%, 0%, 0.13), 0 3px 3px hsla(0, 0%, 0%, 0.05);
+  box-shadow:
+    0 0 0 1px hsla(0, 0%, 0%, 0.1),
+    0 4px 0px 0 hsla(0, 0%, 0%, 0.04),
+    0 4px 9px hsla(0, 0%, 0%, 0.13),
+    0 3px 3px hsla(0, 0%, 0%, 0.05);
   -webkit-transition: 0.35s cubic-bezier(0.54, 1.6, 0.5, 1);
   transition: 0.35s cubic-bezier(0.54, 1.6, 0.5, 1);
 }
@@ -1669,8 +1808,11 @@ input[type='number'] {
   content: '';
   position: absolute;
   display: block;
-  box-shadow: 0 0 0 1px hsla(0, 0%, 0%, 0.02), 0 4px 0px 0 hsla(0, 0%, 0%, 0.01),
-    0 4px 9px hsla(0, 0%, 0%, 0.08), 0 3px 3px hsla(0, 0%, 0%, 0.03);
+  box-shadow:
+    0 0 0 1px hsla(0, 0%, 0%, 0.02),
+    0 4px 0px 0 hsla(0, 0%, 0%, 0.01),
+    0 4px 9px hsla(0, 0%, 0%, 0.08),
+    0 3px 3px hsla(0, 0%, 0%, 0.03);
   -webkit-transition: 0.35s cubic-bezier(0.54, 1.6, 0.5, 1);
   transition: 0.35s cubic-bezier(0.54, 1.6, 0.5, 1);
   background: #fff;

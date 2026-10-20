@@ -39,6 +39,7 @@ if ! "$open_tool" "$target"; then
   "$open_tool" "$target" || true
   exit 1
 fi
+/usr/bin/touch "$(/usr/bin/dirname "$backup")/launch-succeeded"
 echo "Update installed and launch requested; previous app retained at $backup"
 `;
 

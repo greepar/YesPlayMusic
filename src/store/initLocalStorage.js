@@ -30,6 +30,7 @@ let localStorage = {
     closeAppOption: 'ask',
     enableDiscordRichPresence: false,
     enableGlobalShortcut: true,
+    autoCheckUpdates: true,
     disableUiAutoRelease: false,
     showLibraryDefault: false,
     subTitleDefault: false,

@@ -9,7 +9,7 @@
     "build": "vue-cli-service build",
     "lint": "vue-cli-service lint",
     "test:electron-window": "node --test tests/waylandWindow.test.cjs",
-    "test:electron-update": "node --test tests/linuxAppImageUpdate.test.cjs tests/windowsUpdate.test.cjs tests/macUpdate.test.cjs",
+    "test:electron-update": "node --test tests/linuxAppImageUpdate.test.cjs tests/windowsUpdate.test.cjs tests/macUpdate.test.cjs tests/updateProgress.test.cjs",
     "test:electron-update-integration": "node tests/linuxAppImageUpdate.integration.cjs",
     "test:mac-update-native": "node tests/macUpdate.native.cjs",
     "test:mac-update-electron": "electron tests/macUpdate.native.cjs",

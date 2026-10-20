@@ -12,6 +12,7 @@ const { MAC_INSTALL_SCRIPT } = require('../src/electron/macInstallScript');
 const {
   stageMacBundle,
   verifyMacBundle,
+  cleanupMacUpdates,
 } = require('../src/electron/macUpdate');
 (async () => {
   if (electronApp) await electronApp.whenReady();
@@ -126,9 +127,30 @@ const {
         await fs.readFile(path.join(backup, 'Contents/Info.plist')),
         previous
       );
+      const scriptName = 'install-00000000-0000-4000-8000-000000000000.sh';
+      const cachedArchive = path.join(
+        dir,
+        `YesPlayMusic-${version}-${process.arch}.zip`
+      );
+      await fs.copyFile(archive, cachedArchive);
+      await fs.writeFile(path.join(dir, scriptName), 'fixture');
+      await fs.writeFile(
+        path.join(path.dirname(backup), 'pending-update.json'),
+        JSON.stringify({
+          format: 1,
+          target: await fs.realpath(old),
+          version,
+          arch: process.arch,
+          script: scriptName,
+        })
+      );
+      await cleanupMacUpdates({ currentApp: old, cacheDir: dir, version });
+      await assert.rejects(fs.stat(backup), { code: 'ENOENT' });
+      await assert.rejects(fs.stat(cachedArchive), { code: 'ENOENT' });
+      await verifyMacBundle(old, { ...options, version });
     }
     console.log(
-      'PASS: consecutive ad-hoc updates 1.0.0 -> 1.0.1 -> 1.0.2, native replacement, executable launch and backups'
+      'PASS: consecutive ad-hoc updates, native replacement, launch, backup and startup cleanup (including app.asar)'
     );
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
