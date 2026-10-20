@@ -41,6 +41,9 @@ jobs:
           node-version: 24
           cache: 'yarn'
 
+      - name: Verify window lifecycle
+        run: npm run test:electron-window
+
       - name: Install icon tools (on Ubuntu)
         if: runner.os == 'Linux'
         run: |

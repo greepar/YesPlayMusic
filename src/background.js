@@ -26,6 +26,7 @@ import { startNeteaseMusicApi } from './electron/services';
 import { getLatestPlayerSnapshot, initIpcMain } from './electron/ipcMain.js';
 import { openExternalLinksInBrowser } from './electron/windowOpen';
 import { setWindowRenderingSuspended } from './electron/windowPerformance';
+import { createMainWindow } from './electron/waylandWindow';
 import { createMenu } from './electron/menu';
 import { createTray } from '@/electron/tray';
 import { createTouchBar } from './electron/touchBar';
@@ -323,7 +324,7 @@ class Background {
       }
     }
 
-    this.window = new BrowserWindow(options);
+    this.window = createMainWindow(options);
 
     // hide menu bar on Microsoft Windows and Linux
     this.window.setMenuBarVisibility(false);
@@ -402,7 +403,7 @@ class Background {
       return;
     }
     if (this.window.isMinimized()) this.window.restore();
-    this.window.show();
+    else this.window.show();
     this.window.focus();
     setWindowRenderingSuspended(this.window, false);
   }

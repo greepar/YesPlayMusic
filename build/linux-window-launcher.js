@@ -18,8 +18,22 @@ for arg in "$@"; do
     --ozone-platform|--ozone-platform=*) explicit_backend=1 ;;
   esac
 done
-if [[ -n "$WAYLAND_DISPLAY" && -n "$DISPLAY" && "$explicit_backend" == 0 ]]; then
-  set -- --ozone-platform=x11 "$@"
+if [[ "$explicit_backend" == 0 ]]; then
+  backend=""
+  case "$XDG_SESSION_TYPE" in
+    wayland) backend=wayland ;;
+    x11) backend=x11 ;;
+    *)
+      if [[ -n "$WAYLAND_DISPLAY" ]]; then
+        backend=wayland
+      elif [[ -n "$DISPLAY" ]]; then
+        backend=x11
+      fi
+      ;;
+  esac
+  if [[ -n "$backend" ]]; then
+    set -- "--ozone-platform=$backend" "$@"
+  fi
 fi
 exec "$app_dir/yesplaymusic.bin" "$@"
 `,
