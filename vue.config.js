@@ -195,6 +195,7 @@ module.exports = {
         },
         linux: {
           executableName: 'yesplaymusic',
+          artifactName: '${productName}-${version}-${arch}.${ext}',
           // 只发布 AppImage（x64 / arm64）。Electron 44 没有 armv7l 的官方构建；
           // 同时构建多种格式时 electron-builder 的缓存目录会发生竞争
           target: [

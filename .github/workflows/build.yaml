@@ -42,7 +42,9 @@ jobs:
           cache: 'yarn'
 
       - name: Verify window lifecycle
-        run: npm run test:electron-window
+        run: |
+          npm run test:electron-window
+          npm run test:electron-update
 
       - name: Install icon tools (on Ubuntu)
         if: runner.os == 'Linux'
@@ -61,6 +63,10 @@ jobs:
       - name: Install dependencies
         run: yarn --ignore-engines --ignore-optional
         shell: bash
+
+      - name: Verify AppImage download and installation
+        if: runner.os == 'Linux'
+        run: npm run test:electron-update-integration
 
       - name: Install dmg-license (macOS)
         if: runner.os == 'macOS'
@@ -100,12 +106,6 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$app"
           codesign -dv "$app" 2>&1 | grep -E "Signature|Authority|flags" || true
 
-      - name: Verify Windows update metadata
-        if: runner.os == 'Windows'
-        run: |
-          node -e "const fs=require('fs');const crypto=require('crypto');const path=require('path');const yaml=require('js-yaml');const info=yaml.load(fs.readFileSync('dist_electron/latest.yml','utf8'));const file=path.join('dist_electron',info.files[0].url);if(!fs.existsSync(file))throw Error('Update installer missing: '+file);const bytes=fs.readFileSync(file);if(bytes.length!==info.files[0].size||crypto.createHash('sha512').update(bytes).digest('base64')!==info.files[0].sha512)throw Error('Update metadata does not match installer');console.log('Update metadata matches '+file)"
-        shell: pwsh
-
       - uses: actions/upload-artifact@v7
         with:
           name: YesPlayMusic-${{ matrix.name }}
@@ -113,7 +113,6 @@ jobs:
             dist_electron/*.dmg
             dist_electron/*.exe
             dist_electron/*.AppImage
-            dist_electron/latest.yml
           if-no-files-found: error
 
   release:

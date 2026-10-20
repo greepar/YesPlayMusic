@@ -12,6 +12,7 @@ import {
   screen,
   session,
   powerMonitor,
+  net,
 } from 'electron';
 import {
   isWindows,
@@ -33,6 +34,9 @@ import { createTouchBar } from './electron/touchBar';
 import { createDockMenu } from './electron/dockMenu';
 import { registerGlobalShortcut } from './electron/globalShortcut';
 import { autoUpdater } from 'electron-updater';
+import { createLinuxAppImageUpdater } from './electron/linuxAppImageUpdate';
+import { GitHubTagProvider } from './electron/githubTagProvider';
+import { latestRelease, isNewerVersion } from './electron/githubRelease';
 import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer';
 import { EventEmitter } from 'events';
 import express from 'express';
@@ -341,8 +345,8 @@ class Background {
         restoredRoute
           ? `${devServerUrl}/${restoredRoute}`
           : showLibraryDefault
-          ? `${devServerUrl}/#/library`
-          : process.env.WEBPACK_DEV_SERVER_URL
+            ? `${devServerUrl}/#/library`
+            : process.env.WEBPACK_DEV_SERVER_URL
       );
       if (!process.env.IS_TEST) this.window.webContents.openDevTools();
     } else {
@@ -351,8 +355,8 @@ class Background {
         restoredRoute
           ? `http://localhost:27232/${restoredRoute}`
           : showLibraryDefault
-          ? 'http://localhost:27232/#/library'
-          : 'http://localhost:27232'
+            ? 'http://localhost:27232/#/library'
+            : 'http://localhost:27232'
       );
     }
     this.handleWindowEvents();
@@ -462,38 +466,52 @@ class Background {
   checkForUpdates() {
     if (isDevelopment) return;
     log('checkForUpdates');
-    // Updates are installed by the user from the release page. Avoid
-    // downloading a full installer (and installing it on app quit) just to
-    // show the new-version prompt.
-    autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = false;
-    autoUpdater.checkForUpdates().catch(error => {
-      // Unpacked development builds do not contain app-update.yml.
-      log(`update check skipped: ${error.message}`);
-    });
-
-    const showNewVersionMessage = info => {
-      dialog
-        .showMessageBox({
-          title: '发现新版本 v' + info.version,
-          message: '发现新版本 v' + info.version,
-          detail: '是否前往 GitHub 下载新版本安装包？',
-          buttons: ['下载', '取消'],
-          type: 'question',
-          noLink: true,
-        })
-        .then(result => {
-          if (result.response === 0) {
-            shell.openExternal(
-              'https://github.com/greepar/YesPlayMusic/releases'
-            );
-          }
+    if (isLinux) {
+      if (!process.env.APPIMAGE) return;
+      if (!this.linuxAppImageUpdater) {
+        autoUpdater.setFeedURL({
+          provider: 'custom',
+          updateProvider: GitHubTagProvider,
         });
-    };
+        autoUpdater.disableDifferentialDownload = true;
+        this.linuxAppImageUpdater = createLinuxAppImageUpdater({
+          updater: autoUpdater,
+          dialog,
+          log,
+        });
+        this.updateCheckTimer = setInterval(
+          () => this.linuxAppImageUpdater.check(),
+          6 * 60 * 60 * 1000
+        );
+        this.updateCheckTimer.unref();
+      }
+      this.linuxAppImageUpdater.check();
+      return;
+    }
+    this.checkTagUpdates();
+  }
 
-    autoUpdater.once('update-available', info => {
-      showNewVersionMessage(info);
-    });
+  async checkTagUpdates() {
+    try {
+      const info = await latestRelease((...args) => net.fetch(...args));
+      if (!isNewerVersion(info.version, app.getVersion())) return;
+      const result = await dialog.showMessageBox({
+        title: `发现新版本 v${info.version}`,
+        message: `发现新版本 v${info.version}`,
+        detail: '是否前往 GitHub 下载新版本安装包？',
+        buttons: ['下载', '取消'],
+        cancelId: 1,
+        type: 'question',
+        noLink: true,
+      });
+      if (result.response === 0) {
+        shell.openExternal(
+          `https://github.com/greepar/YesPlayMusic/releases/tag/${encodeURIComponent(info.tag_name)}`
+        );
+      }
+    } catch (error) {
+      log(`update check skipped: ${error.message}`);
+    }
   }
 
   handleWindowEvents() {
@@ -508,7 +526,7 @@ class Background {
 
     win.on('close', e => {
       log('window close event');
-      if (this.destroyingUi) return;
+      if (this.destroyingUi || this.isQuitting) return;
 
       if (isLinux) {
         closeOnLinux(e, win, this.store);
@@ -704,6 +722,7 @@ class Background {
     });
 
     app.on('before-quit', () => {
+      clearInterval(this.updateCheckTimer);
       this.willQuitApp = true;
       this.isQuitting = true;
       this.audioWindow?.destroy();

@@ -26,6 +26,22 @@
 > 「系统设置 → 隐私与安全性」中点击「仍要打开」，或在终端执行
 > `xattr -cr /Applications/YesPlayMusic.app`。
 
+### Linux AppImage 自动更新
+
+AppImage 启动后及运行期间每 6 小时检查正式版更新，自动下载并校验安装包。
+下载完成后选择“重启并更新”即可替换 AppImage 本体；选择“稍后”不会中断播放，
+也不会在退出时自动安装，下次启动时会再次提醒。网络或下载错误不会影响当前版本。
+
+AppImage 文件及其所在目录必须可写。推荐放在
+`~/.local/share/yesplaymusic/YesPlayMusic.AppImage`，并让桌面启动图标指向这个路径。
+文件名不要包含版本号，以便更新后保持启动路径不变。放在 root 管理的 `/opt` 或
+`/usr` 时，请先移到用户目录；应用不会自行提权修改系统文件。
+Windows、macOS 和 Linux 均直接根据 GitHub 正式版 Release 的 tag 检测更新，
+无需 `latest.yml` / `latest-linux.yml`。Linux 按架构选择 Release 中的 AppImage，
+并使用 GitHub API 提供的 SHA-256 摘要校验安装包；缺少摘要时拒绝安装。
+Windows 和 macOS 暂时仍通过提示前往对应版本页面下载。
+旧版仅提供网页下载提示，需要手动安装一次带自动更新功能的版本。
+
 ## 👷‍♂️ 打包客户端
 
 如果在 Release 页面没有找到适合你的设备的安装包的话，你可以根据下面的步骤来打包自己的客户端。
