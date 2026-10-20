@@ -86,7 +86,9 @@ function verifier({
 } = {}) {
   return async (command, args) => {
     if (command.endsWith('lipo')) {
-      assert.ok(args[0].endsWith('/Contents/MacOS/YesPlayMusic'));
+      assert.ok(
+        args[0].endsWith(path.join('Contents', 'MacOS', 'YesPlayMusic'))
+      );
       assert.equal(args[1], '-verify_arch');
       assert.ok(['arm64', 'x86_64'].includes(args[2]));
     }
@@ -97,7 +99,7 @@ function verifier({
           ? version
           : key.includes('Executable')
             ? 'YesPlayMusic'
-            : args[2].startsWith('/old')
+            : args[2] === path.join('/old.app', 'Contents/Info.plist')
               ? 'com.electron.yesplaymusic'
               : bundleId,
       };
