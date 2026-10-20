@@ -95,7 +95,7 @@ Windows 单文件便携版也支持 x64 / ARM64 自更新：发现新版先询�
 | ----------------------------------- | ------------------------------- |
 | `yarn electron:build --mac --arm64` | macOS Apple 芯片（在 macOS 上） |
 | `yarn electron:build --mac --x64`   | macOS Intel（在 macOS 上）      |
-| `yarn electron:build --win --x64`  | Windows x64                     |
+| `yarn electron:build --win nsis portable --x64` | Windows x64                     |
 | `yarn electron:build-win-arm64`    | Windows ARM64                   |
 | `yarn electron:build --win`        | Windows x64 和 ARM64（分别输出安装版与便携版） |
 | `yarn electron:build --linux`       | Linux AppImage（x64 和 arm64）  |

@@ -18,7 +18,7 @@
     "electron:build-all": "vue-cli-service electron:build -p never -mwl",
     "electron:build-mac": "vue-cli-service electron:build -p never -m",
     "electron:build-win": "vue-cli-service electron:build -p never -w",
-    "electron:build-win-arm64": "vue-cli-service electron:build -p never -w --arm64",
+    "electron:build-win-arm64": "vue-cli-service electron:build -p never -w nsis portable --arm64",
     "electron:build-linux": "vue-cli-service electron:build -p never -l",
     "electron:serve": "vue-cli-service electron:serve",
     "electron:buildicon": "electron-icon-builder --input=./build/icons/icon.png --output=build --flatten",

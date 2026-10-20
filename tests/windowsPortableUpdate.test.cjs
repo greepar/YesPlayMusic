@@ -303,6 +303,7 @@ public static class YpmPortableLock {
   public static void Hold(string path) {
     file = System.IO.File.Open(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read);
     timer = new System.Threading.Timer(state => file.Dispose(), null, 1500, System.Threading.Timeout.Infinite);
+    System.GC.KeepAlive(timer);
   }
 }
 '@
