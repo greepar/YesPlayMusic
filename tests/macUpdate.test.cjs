@@ -85,6 +85,11 @@ function verifier({
   invalidSignature = false,
 } = {}) {
   return async (command, args) => {
+    if (command.endsWith('lipo')) {
+      assert.ok(args[0].endsWith('/Contents/MacOS/YesPlayMusic'));
+      assert.equal(args[1], '-verify_arch');
+      assert.ok(['arm64', 'x86_64'].includes(args[2]));
+    }
     if (command.endsWith('PlistBuddy')) {
       const key = args[1];
       return {

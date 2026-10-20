@@ -113,9 +113,9 @@ async function verifyMacBundle(
     throw new Error('更新应用的可执行文件名称无效。');
   const architecture = arch === 'x64' ? 'x86_64' : arch;
   await execute('/usr/bin/lipo', [
+    path.join(candidate, 'Contents/MacOS', executable),
     '-verify_arch',
     architecture,
-    path.join(candidate, 'Contents/MacOS', executable),
   ]);
   const identity = async appPath => {
     const { stderr } = await execute('/usr/bin/codesign', [
