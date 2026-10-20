@@ -213,12 +213,11 @@ module.exports = {
           format: 'UDBZ',
         },
         nsis: {
-          // The release uploader replaces spaces in asset names. Keep the
-          // installer filename identical to the URL in latest.yml so older
-          // electron-updater clients can fetch it.
+          // The tag-based updater selects this installer, never the portable exe.
           artifactName: '${productName}.Setup.${version}.${ext}',
           oneClick: true,
           perMachine: true,
+          packElevateHelper: true,
           deleteAppDataOnUninstall: true,
         },
       },

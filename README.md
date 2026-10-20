@@ -39,7 +39,15 @@ AppImage 文件及其所在目录必须可写。推荐放在
 Windows、macOS 和 Linux 均直接根据 GitHub 正式版 Release 的 tag 检测更新，
 无需 `latest.yml` / `latest-linux.yml`。Linux 按架构选择 Release 中的 AppImage，
 并使用 GitHub API 提供的 SHA-256 摘要校验安装包；缺少摘要时拒绝安装。
-Windows 和 macOS 暂时仍通过提示前往对应版本页面下载。
+macOS 暂时仍通过提示前往对应版本页面下载。
+
+### Windows 安装版自动更新
+
+安装版启动后及每 6 小时根据正式版 Release tag 检查更新，自动下载
+`YesPlayMusic.Setup.<版本>.exe`，使用 GitHub 附件 SHA-256 校验。
+下载完成后选择“重启并更新”，通过 NSIS 覆盖安装并重新启动。
+全局安装可能弹出 Windows 管理员授权；取消或选择“稍后”不会在退出时偷偷安装。
+便携版继续提示前往下载，不会自动转换为安装版。旧版需先手动安装一次新版。
 旧版仅提供网页下载提示，需要手动安装一次带自动更新功能的版本。
 
 ## 👷‍♂️ 打包客户端

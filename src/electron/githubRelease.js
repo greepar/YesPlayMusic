@@ -55,6 +55,35 @@ function appImageUpdateInfo(
       `YesPlayMusic-${version}.AppImage`
     );
   }
+  return releaseAssetUpdateInfo(
+    release,
+    names,
+    `${arch} AppImage`,
+    repositoryUrl
+  );
+}
+
+function windowsUpdateInfo(
+  release,
+  arch,
+  repositoryUrl = 'https://github.com/greepar/YesPlayMusic'
+) {
+  const version = releaseVersion(release);
+  if (arch !== 'x64') throw new Error(`不支持自动更新的 Windows 架构：${arch}`);
+  const info = releaseAssetUpdateInfo(
+    release,
+    [`YesPlayMusic.Setup.${version}.exe`, `YesPlayMusic Setup ${version}.exe`],
+    'Windows x64 安装包',
+    repositoryUrl
+  );
+  // Matches nsis.perMachine=true. NsisUpdater must launch elevate.exe so
+  // Windows can request UAC before replacing a Program Files installation.
+  info.files[0].isAdminRightsRequired = true;
+  return info;
+}
+
+function releaseAssetUpdateInfo(release, names, description, repositoryUrl) {
+  const version = releaseVersion(release);
   const asset = names
     .map(name => release.assets?.find(file => file.name === name))
     .find(Boolean);
@@ -64,7 +93,7 @@ function appImageUpdateInfo(
     !Number.isSafeInteger(asset.size) ||
     asset.size <= 0
   ) {
-    throw new Error(`版本 ${release.tag_name} 尚未提供 ${arch} AppImage。`);
+    throw new Error(`版本 ${release.tag_name} 尚未提供 ${description}。`);
   }
   if (!/^sha256:[a-f0-9]{64}$/.test(asset.digest || '')) {
     throw new Error('GitHub 未提供有效的安装包校验值，已跳过更新。');
@@ -93,4 +122,5 @@ module.exports = {
   isNewerVersion,
   latestRelease,
   appImageUpdateInfo,
+  windowsUpdateInfo,
 };

@@ -6,12 +6,15 @@ const {
   RELEASE_API,
   RELEASE_HEADERS,
   appImageUpdateInfo,
+  windowsUpdateInfo,
 } = require('./githubRelease');
 
 class GitHubTagProvider extends Provider {
   constructor(options, updater, runtimeOptions) {
     super(runtimeOptions);
     this.options = options;
+    this.platform =
+      options.platform || runtimeOptions.platform || process.platform;
   }
 
   async getLatestVersion() {
@@ -19,7 +22,9 @@ class GitHubTagProvider extends Provider {
       new URL(this.options.apiUrl || RELEASE_API),
       RELEASE_HEADERS
     );
-    return appImageUpdateInfo(
+    const select =
+      this.platform === 'win32' ? windowsUpdateInfo : appImageUpdateInfo;
+    return select(
       JSON.parse(body),
       this.options.arch || process.arch,
       this.options.repositoryUrl

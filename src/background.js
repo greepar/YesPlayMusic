@@ -35,6 +35,10 @@ import { createDockMenu } from './electron/dockMenu';
 import { registerGlobalShortcut } from './electron/globalShortcut';
 import { autoUpdater } from 'electron-updater';
 import { createLinuxAppImageUpdater } from './electron/linuxAppImageUpdate';
+import {
+  createWindowsInstallerUpdater,
+  isPortableWindows,
+} from './electron/windowsUpdate';
 import { GitHubTagProvider } from './electron/githubTagProvider';
 import { latestRelease, isNewerVersion } from './electron/githubRelease';
 import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer';
@@ -486,6 +490,27 @@ class Background {
         this.updateCheckTimer.unref();
       }
       this.linuxAppImageUpdater.check();
+      return;
+    }
+    if (isWindows && !isPortableWindows()) {
+      if (!this.windowsInstallerUpdater) {
+        autoUpdater.setFeedURL({
+          provider: 'custom',
+          updateProvider: GitHubTagProvider,
+          platform: 'win32',
+        });
+        this.windowsInstallerUpdater = createWindowsInstallerUpdater({
+          updater: autoUpdater,
+          dialog,
+          log,
+        });
+        this.updateCheckTimer = setInterval(
+          () => this.windowsInstallerUpdater.check(),
+          6 * 60 * 60 * 1000
+        );
+        this.updateCheckTimer.unref();
+      }
+      this.windowsInstallerUpdater.check();
       return;
     }
     this.checkTagUpdates();

@@ -68,6 +68,10 @@ jobs:
         if: runner.os == 'Linux'
         run: npm run test:electron-update-integration
 
+      - name: Verify Windows updater download and installer dispatch
+        if: runner.os == 'Windows'
+        run: npm run test:windows-update-integration
+
       - name: Install dmg-license (macOS)
         if: runner.os == 'macOS'
         run: ${{ env.YARN_INSTALL_NOPT }} dmg-license
