@@ -254,3 +254,13 @@ test('Windows and macOS release checks need no YAML manifest', async () => {
     /HTTP 403/
   );
 });
+
+test('electron-builder x86_64 asset name is accepted for Node x64', () => {
+  const release = releaseFixture();
+  release.assets[0].name = release.assets[0].name.replace('-x64.', '-x86_64.');
+  release.assets[0].browser_download_url =
+    release.assets[0].browser_download_url.replace('-x64.', '-x86_64.');
+  assert.ok(
+    appImageUpdateInfo(release, 'x64').files[0].url.endsWith('-x86_64.AppImage')
+  );
+});

@@ -49,7 +49,12 @@ function appImageUpdateInfo(
   if (!['x64', 'arm64'].includes(arch))
     throw new Error(`不支持自动更新的架构：${arch}`);
   const names = [`YesPlayMusic-${version}-${arch}.AppImage`];
-  if (arch === 'x64') names.push(`YesPlayMusic-${version}.AppImage`);
+  if (arch === 'x64') {
+    names.push(
+      `YesPlayMusic-${version}-x86_64.AppImage`,
+      `YesPlayMusic-${version}.AppImage`
+    );
+  }
   const asset = names
     .map(name => release.assets?.find(file => file.name === name))
     .find(Boolean);
