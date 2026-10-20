@@ -142,28 +142,32 @@ test('permissions revoked after download prevent installation', async () => {
   assert.equal(calls.dialogs.at(-1).type, 'error');
 });
 
-test('file and parent directory must both be writable', async () => {
-  const dir = await fs.mkdtemp(
-    path.join(os.tmpdir(), 'ypm-update-permissions-')
-  );
-  const file = path.join(dir, 'YesPlayMusic.AppImage');
-  try {
-    await fs.writeFile(file, 'test');
-    await assertAppImageWritable(file);
-    await fs.chmod(dir, 0o500);
-    await assert.rejects(assertAppImageWritable(file), /无法写入/);
-    await fs.chmod(dir, 0o700);
-    await fs.chmod(file, 0o400);
-    await assert.rejects(assertAppImageWritable(file), /无法写入/);
-    await assert.rejects(
-      assertAppImageWritable('relative.AppImage'),
-      /AppImage/
+test(
+  'file and parent directory must both be writable',
+  { skip: process.platform === 'win32' },
+  async () => {
+    const dir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'ypm-update-permissions-')
     );
-  } finally {
-    await fs.chmod(dir, 0o700);
-    await fs.rm(dir, { recursive: true, force: true });
+    const file = path.join(dir, 'YesPlayMusic.AppImage');
+    try {
+      await fs.writeFile(file, 'test');
+      await assertAppImageWritable(file);
+      await fs.chmod(dir, 0o500);
+      await assert.rejects(assertAppImageWritable(file), /无法写入/);
+      await fs.chmod(dir, 0o700);
+      await fs.chmod(file, 0o400);
+      await assert.rejects(assertAppImageWritable(file), /无法写入/);
+      await assert.rejects(
+        assertAppImageWritable('relative.AppImage'),
+        /AppImage/
+      );
+    } finally {
+      await fs.chmod(dir, 0o700);
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   }
-});
+);
 
 const {
   releaseVersion,
