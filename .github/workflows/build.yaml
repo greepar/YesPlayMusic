@@ -24,7 +24,7 @@ jobs:
             args: -m --x64 --arm64
           - name: win
             os: windows-latest
-            args: -w
+            args: -w --x64 --arm64
           - name: linux
             os: ubuntu-22.04
             args: -l
@@ -109,6 +109,10 @@ jobs:
           grep -rIlE '"/api"|VUE_APP_ELECTRON_API_URL' dist_electron/bundled/js > /dev/null || { echo "::error::API base URL not found in bundle"; exit 1; }
           echo "API base URL looks sane"
         shell: bash
+
+      - name: Verify Windows x64 and ARM64 payloads and update artifacts
+        if: runner.os == 'Windows'
+        run: node build/verify-windows-artifacts.cjs
 
       - name: Verify macOS code signature
         if: runner.os == 'macOS'

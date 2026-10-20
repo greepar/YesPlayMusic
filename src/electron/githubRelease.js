@@ -69,11 +69,21 @@ function windowsUpdateInfo(
   repositoryUrl = 'https://github.com/greepar/YesPlayMusic'
 ) {
   const version = releaseVersion(release);
-  if (arch !== 'x64') throw new Error(`不支持自动更新的 Windows 架构：${arch}`);
+  if (!['x64', 'arm64'].includes(arch))
+    throw new Error(`不支持自动更新的 Windows 架构：${arch}`);
+  const names = [
+    `YesPlayMusic.Setup.${version}-${arch}.exe`,
+    `YesPlayMusic Setup ${version}-${arch}.exe`,
+  ];
+  if (arch === 'x64')
+    names.push(
+      `YesPlayMusic.Setup.${version}.exe`,
+      `YesPlayMusic Setup ${version}.exe`
+    );
   const info = releaseAssetUpdateInfo(
     release,
-    [`YesPlayMusic.Setup.${version}.exe`, `YesPlayMusic Setup ${version}.exe`],
-    'Windows x64 安装包',
+    names,
+    `Windows ${arch} 安装包`,
     repositoryUrl
   );
   // Matches nsis.perMachine=true. NsisUpdater must launch elevate.exe so
@@ -94,6 +104,24 @@ function macUpdateInfo(
     release,
     [`YesPlayMusic-mac-${version}-${arch}.zip`],
     `macOS ${arch} ZIP`,
+    repositoryUrl
+  );
+}
+
+function windowsPortableUpdateInfo(
+  release,
+  arch,
+  repositoryUrl = 'https://github.com/greepar/YesPlayMusic'
+) {
+  const version = releaseVersion(release);
+  if (!['x64', 'arm64'].includes(arch))
+    throw new Error(`不支持自动更新的 Windows 架构：${arch}`);
+  const names = [`YesPlayMusic.${version}-${arch}.exe`];
+  if (arch === 'x64') names.push(`YesPlayMusic.${version}.exe`);
+  return releaseAssetUpdateInfo(
+    release,
+    names,
+    `Windows ${arch} 单文件版`,
     repositoryUrl
   );
 }
@@ -139,5 +167,6 @@ module.exports = {
   latestRelease,
   appImageUpdateInfo,
   windowsUpdateInfo,
+  windowsPortableUpdateInfo,
   macUpdateInfo,
 };

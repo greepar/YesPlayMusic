@@ -64,11 +64,19 @@ ZIP 和安装脚本；主界面未成功加载时保留备份。启动请求成�
 ### Windows 安装版自动更新
 
 安装版启动后及每 6 小时根据正式版 Release tag 检查更新，自动下载
-`YesPlayMusic.Setup.<版本>.exe`，使用 GitHub 附件 SHA-256 校验。
+`YesPlayMusic.Setup.<版本>-<架构>.exe`（x64 / ARM64），使用 GitHub 附件 SHA-256 校验。
+ARM64 只选择 ARM64 安装包；x64 同时兼容旧版无架构后缀的安装包名。
+发布时保留 `YesPlayMusic.Setup.<版本>.exe` 的 x64 兼容副本，供旧版更新器使用。
 下载完成后选择“重启并更新”，通过 NSIS 覆盖安装并重新启动。
 全局安装可能弹出 Windows 管理员授权；取消或选择“稍后”不会在退出时偷偷安装。
-便携版继续提示前往下载，不会自动转换为安装版。旧版需先手动安装一次新版。
-旧版仅提供网页下载提示，需要手动安装一次带自动更新功能的版本。
+
+Windows 单文件便携版也支持 x64 / ARM64 自更新：发现新版先询问，选择“下载并安装”后
+下载 `YesPlayMusic.<版本>-<架构>.exe`，校验 SHA-256；退出后等待原便携启动器释放文件，
+在原位置替换 EXE 并重新打开，不会转换为安装版。程序和所在目录必须可写，建议使用
+固定文件名 `YesPlayMusic.exe`，放在桌面、下载或其他用户目录。
+替换或启动失败时尝试恢复并重新打开旧版；新版主界面成功加载 5 秒后清理旧 EXE、
+缓存与安装脚本。更新缓存位于用户数据目录的 `updates/portable` 下。
+旧单文件版仍需手动替换一次含自更新功能的新版，后续即可使用应用内更新。
 
 ## 👷‍♂️ 打包客户端
 
@@ -87,7 +95,9 @@ ZIP 和安装脚本；主界面未成功加载时保留备份。启动请求成�
 | ----------------------------------- | ------------------------------- |
 | `yarn electron:build --mac --arm64` | macOS Apple 芯片（在 macOS 上） |
 | `yarn electron:build --mac --x64`   | macOS Intel（在 macOS 上）      |
-| `yarn electron:build --win`         | Windows x64                     |
+| `yarn electron:build --win --x64`  | Windows x64                     |
+| `yarn electron:build-win-arm64`    | Windows ARM64                   |
+| `yarn electron:build --win`        | Windows x64 和 ARM64（分别输出安装版与便携版） |
 | `yarn electron:build --linux`       | Linux AppImage（x64 和 arm64）  |
 
 ## :computer: 配置开发环境

@@ -37,6 +37,10 @@ import { autoUpdater } from 'electron-updater';
 import { createMacAppUpdater, cleanupMacUpdates } from './electron/macUpdate';
 import { createUpdateCheckScheduler } from './electron/updateScheduler';
 import { createUpdateProgress } from './electron/updateProgress';
+import {
+  createWindowsPortableUpdater,
+  cleanupWindowsPortableUpdates,
+} from './electron/windowsPortableUpdate';
 import { createLinuxAppImageUpdater } from './electron/linuxAppImageUpdate';
 import {
   createWindowsInstallerUpdater,
@@ -378,34 +382,44 @@ class Background {
     this.uiReleaseTimer = null;
   }
 
-  scheduleMacUpdateCleanup() {
+  scheduleUpdateCleanup() {
     if (
-      !isMac ||
+      !(isMac || (isWindows && isPortableWindows())) ||
       isDevelopment ||
-      !this.macAppInitialized ||
-      !this.macUiLoaded ||
-      this.macCleanupTimer
+      !this.updateAppInitialized ||
+      !this.updateUiLoaded ||
+      this.updateCleanupTimer
     )
       return;
     // Give the relaunched app time to finish startup before releasing rollback
     // files. The installer also marks that LaunchServices accepted the launch.
-    this.macCleanupTimer = setTimeout(() => {
+    this.updateCleanupTimer = setTimeout(() => {
       if (
         !this.window ||
         this.window.isDestroyed() ||
         this.window.webContents.isCrashed()
       ) {
-        this.macCleanupTimer = null;
+        this.updateCleanupTimer = null;
         return;
       }
-      cleanupMacUpdates({
-        currentApp: path.resolve(process.resourcesPath, '../..'),
-        cacheDir: path.join(app.getPath('cache'), 'yesplaymusic-updater-mac'),
-        version: app.getVersion(),
-        log,
-      }).catch(error => log(`macOS update cleanup deferred: ${error.message}`));
+      const cleanup = isMac
+        ? cleanupMacUpdates({
+            currentApp: path.resolve(process.resourcesPath, '../..'),
+            cacheDir: path.join(
+              app.getPath('cache'),
+              'yesplaymusic-updater-mac'
+            ),
+            version: app.getVersion(),
+            log,
+          })
+        : cleanupWindowsPortableUpdates({
+            cacheDir: path.join(app.getPath('userData'), 'updates', 'portable'),
+            version: app.getVersion(),
+            log,
+          });
+      cleanup.catch(error => log(`Update cleanup deferred: ${error.message}`));
     }, 5000);
-    this.macCleanupTimer.unref();
+    this.updateCleanupTimer.unref();
   }
 
   scheduleUiRelease() {
@@ -547,6 +561,21 @@ class Background {
       }
       return this.windowsInstallerUpdater.check({ manual });
     }
+    if (isWindows) {
+      if (!this.windowsPortableUpdater) {
+        this.windowsPortableUpdater = createWindowsPortableUpdater({
+          app,
+          dialog,
+          log,
+          canNotify: () =>
+            this.store.get('settings.autoCheckUpdates') !== false,
+          onProgress: state => this.updateProgress.report(state),
+          fetchRelease: (...args) => net.fetch(...args),
+          cacheDir: path.join(app.getPath('userData'), 'updates', 'portable'),
+        });
+      }
+      return this.windowsPortableUpdater.check({ manual });
+    }
     if (isMac) {
       if (!this.macAppUpdater) {
         this.macAppUpdater = createMacAppUpdater({
@@ -677,14 +706,14 @@ class Background {
 
     win.webContents.on('did-finish-load', async () => {
       setWindowRenderingSuspended(win, !win.isVisible() || win.isMinimized());
-      if (isMac && !isDevelopment) {
+      if ((isMac || (isWindows && isPortableWindows())) && !isDevelopment) {
         try {
-          this.macUiLoaded = await win.webContents.executeJavaScript(
+          this.updateUiLoaded = await win.webContents.executeJavaScript(
             'Boolean(window.__YESPLAYMUSIC_STORE__)'
           );
-          this.scheduleMacUpdateCleanup();
+          this.scheduleUpdateCleanup();
         } catch (error) {
-          log(`macOS startup confirmation deferred: ${error.message}`);
+          log(`Update startup confirmation deferred: ${error.message}`);
         }
       }
     });
@@ -814,8 +843,8 @@ class Background {
       powerMonitor.on('resume', () => {
         this.audioFacade.webContents.send('system-resume');
       });
-      this.macAppInitialized = true;
-      this.scheduleMacUpdateCleanup();
+      this.updateAppInitialized = true;
+      this.scheduleUpdateCleanup();
     });
 
     app.on('activate', () => {
@@ -833,7 +862,7 @@ class Background {
 
     app.on('before-quit', () => {
       this.updateScheduler?.stop();
-      clearTimeout(this.macCleanupTimer);
+      clearTimeout(this.updateCleanupTimer);
       this.willQuitApp = true;
       this.isQuitting = true;
       this.audioWindow?.destroy();
