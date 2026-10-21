@@ -140,16 +140,24 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+
       - uses: actions/download-artifact@v8
         with:
           pattern: YesPlayMusic-*
           path: release
           merge-multiple: true
 
+      - name: Generate quick download links
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node build/release-notes.cjs "$RELEASE_TAG" release release-notes.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           files: release/*
+          body_path: release-notes.md
           # 所有平台都构建失败时不要创建空的 Release
           fail_on_unmatched_files: true
           draft: false
