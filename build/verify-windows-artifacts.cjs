@@ -16,16 +16,16 @@ async function verifyWindowsArtifacts(output, version) {
     for (const name of [`YesPlayMusic.Setup.${version}-${arch}.exe`, `YesPlayMusic.${version}-${arch}.exe`])
       assert.ok((await fs.stat(path.join(output, name))).size > 0, `Missing Windows artifact: ${name}`);
   }
-  assert.deepEqual(
-    await fs.readFile(path.join(output, `YesPlayMusic.Setup.${version}.exe`)),
-    await fs.readFile(path.join(output, `YesPlayMusic.Setup.${version}-x64.exe`)),
-    'Legacy x64 updater asset differs from x64 installer'
+  await assert.rejects(
+    fs.stat(path.join(output, `YesPlayMusic.Setup.${version}.exe`)),
+    { code: 'ENOENT' },
+    'Unexpected duplicate Setup installer without architecture suffix'
   );
 }
 
 if (require.main === module) {
   verifyWindowsArtifacts(process.argv[2] || 'dist_electron', require('../package.json').version)
-    .then(() => console.log('PASS: Windows x64/ARM64 payload architectures, installer/portable assets and legacy x64 alias'))
+    .then(() => console.log('PASS: Windows x64/ARM64 payload architectures, installer/portable assets without duplicate installers'))
     .catch(error => { console.error(error); process.exitCode = 1; });
 }
 module.exports = { verifyWindowsArtifacts };

@@ -79,7 +79,7 @@ test('Windows x64 and ARM64 select only their own installer; x64 retains legacy 
   assert.throws(() => windowsUpdateInfo(r, 'arm64'), /尚未提供/);
 });
 
-test('Windows build produces separate x64 and ARM64 outputs and retains the legacy x64 update asset', async () => {
+test('Windows build produces only architecture-specific x64 and ARM64 outputs', async () => {
   // CI runs unit tests before dependencies are installed. Webpack is only used
   // by lazy configuration callbacks, so evaluating this config needs no bundle.
   const projectRequire = createRequire(
@@ -110,12 +110,6 @@ test('Windows build produces separate x64 and ARM64 outputs and retains the lega
       artifacts.push(file);
       await fs.writeFile(file, arch);
     }
-    const aliases = await require('../build/windows-update-alias.cjs')({
-      artifactPaths: artifacts,
-    });
-    assert.deepEqual(aliases, [path.join(dir, 'YesPlayMusic.Setup.1.0.1.exe')]);
-    assert.equal(await fs.readFile(aliases[0], 'utf8'), 'x64');
-    assert.equal(await fs.readFile(artifacts[1], 'utf8'), 'arm64');
     for (const [arch, folder, machine] of [
       ['x64', 'win-unpacked', 0x8664],
       ['arm64', 'win-arm64-unpacked', 0xaa64],
