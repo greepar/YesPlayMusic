@@ -60,6 +60,16 @@ export default {
     released: '發行於',
   },
   playlist: {
+    sort: {
+      title: '標題',
+      album: '專輯',
+      duration: '時長',
+      like: '喜歡',
+      default: '恢復預設順序',
+      hint: '點擊切換升冪、降冪和預設順序',
+      loading: '正在載入完整歌單以排序…',
+      loadFailed: '歌曲載入失敗，請重試',
+    },
     playlist: '歌單',
     updatedAt: '最後更新於',
     search: '搜尋歌單內音樂',

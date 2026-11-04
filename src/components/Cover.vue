@@ -45,6 +45,7 @@ import {
 
 export default {
   props: {
+    playAction: { type: Function, default: null },
     id: { type: Number, required: true },
     type: { type: String, required: true },
     imageUrl: { type: String, required: true },
@@ -115,6 +116,7 @@ export default {
   },
   methods: {
     play() {
+      if (this.playAction) return this.playAction();
       const player = this.$store.state.player;
       const playActions = {
         album: player.playAlbumByID,

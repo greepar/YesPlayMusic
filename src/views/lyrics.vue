@@ -1,6 +1,7 @@
 <template>
   <transition name="slide-up">
     <div
+      ref="lyricsPage"
       class="lyrics-page"
       :class="{ 'no-lyric': noLyric, 'is-mac': isMac }"
       :data-theme="theme"
@@ -31,7 +32,7 @@
       ></div>
 
       <div class="left-side">
-        <div>
+        <div ref="playerContent">
           <div v-if="settings.showLyricsTime" class="date">
             {{ date }}
           </div>
@@ -320,6 +321,7 @@ import { isAccountLoggedIn } from '@/utils/auth';
 import { isMac } from '@/utils/platform';
 import { hasListSource, getListSourcePath } from '@/utils/playList';
 import locale from '@/locale';
+import { createLayoutMotion } from '@/utils/layoutMotion';
 import {
   isRenderingSuspended,
   onRenderingStateChange,
@@ -471,6 +473,9 @@ export default {
     },
   },
   watch: {
+    noLyric() {
+      this.$nextTick(() => this.playerLayoutMotion?.refresh());
+    },
     // RemotePlayer replaces currentTrack on every host snapshot (play/pause,
     // volume, like...), so only react when the track actually changes.
     'currentTrack.id'() {
@@ -515,7 +520,14 @@ export default {
     document.addEventListener('keydown', this.handleFullscreenKeydown);
     document.addEventListener('fullscreenchange', this.handleFullscreenChange);
   },
+  mounted() {
+    this.playerLayoutMotion = createLayoutMotion(
+      this.$refs.playerContent,
+      this.$refs.lyricsPage
+    );
+  },
   beforeUnmount: function () {
+    this.playerLayoutMotion?.disconnect();
     this.colorRequestId += 1;
     this.stopRenderingStateListener?.();
     clearInterval(this.timer);
@@ -862,6 +874,12 @@ export default {
 
 <style lang="scss" scoped>
 .lyrics-page {
+  --page-padding: clamp(24px, 6vw, 96px);
+  --column-gap: clamp(40px, 6vw, 96px);
+  --cover-size: min(
+    54vh,
+    (100vw - var(--page-padding) * 2 - var(--column-gap)) / 2
+  );
   position: fixed;
   top: 0;
   right: 0;
@@ -869,7 +887,12 @@ export default {
   bottom: 0;
   z-index: 200;
   background: var(--color-body-bg);
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, var(--cover-size)));
+  column-gap: var(--column-gap);
+  justify-content: center;
+  padding-inline: var(--page-padding);
+  box-sizing: border-box;
   clip: rect(auto, auto, auto, auto);
 }
 
@@ -935,18 +958,23 @@ export default {
 }
 
 .left-side {
-  flex: 1;
+  min-width: 0;
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
-  justify-content: flex-end;
-  margin-right: 32px;
+  justify-content: center;
   margin-top: 24px;
   align-items: center;
-  transition: all 0.5s;
 
   z-index: 1;
 
+  > div {
+    width: 100%;
+    min-width: 0;
+  }
+
   .date {
-    max-width: 54vh;
+    width: 100%;
     margin: 24px 0;
     color: var(--color-text);
     text-align: center;
@@ -960,13 +988,16 @@ export default {
   }
 
   .controls {
-    max-width: 54vh;
+    width: 100%;
     margin-top: 24px;
     color: var(--color-text);
 
     .title {
       margin-top: 8px;
       font-size: 1.4rem;
+      // Reserve the same line before metadata arrives, regardless of script.
+      line-height: 1.4;
+      min-height: 1.4em;
       font-weight: 600;
       opacity: 0.88;
       display: -webkit-box;
@@ -978,6 +1009,8 @@ export default {
     .subtitle {
       margin-top: 4px;
       font-size: 1rem;
+      line-height: 1.5;
+      min-height: 1.5em;
       opacity: 0.58;
       display: -webkit-box;
       -webkit-box-orient: vertical;
@@ -989,8 +1022,14 @@ export default {
       display: flex;
       justify-content: space-between;
 
+      .track-info {
+        min-width: 0;
+        flex: 1;
+      }
+
       .top-right {
         display: flex;
+        flex-shrink: 0;
         justify-content: space-between;
 
         .volume-control {
@@ -1099,8 +1138,9 @@ export default {
 
   img {
     border-radius: 0.75em;
-    width: 54vh;
-    height: 54vh;
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
     user-select: none;
     object-fit: cover;
   }
@@ -1108,8 +1148,8 @@ export default {
   .shadow {
     position: absolute;
     top: 12px;
-    height: 54vh;
-    width: 54vh;
+    height: 100%;
+    width: 100%;
     filter: blur(16px) opacity(0.6);
     transform: scale(0.92, 0.96);
     z-index: -1;
@@ -1119,18 +1159,18 @@ export default {
 }
 
 .right-side {
-  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  grid-column: 2;
+  grid-row: 1;
   font-weight: 600;
   color: var(--color-text);
-  margin-right: 24px;
   z-index: 0;
 
   .lyrics-container {
     height: 100%;
     display: flex;
     flex-direction: column;
-    padding-left: 78px;
-    max-width: 460px;
     overflow-y: auto;
     transition: 0.5s;
     scrollbar-width: none; // firefox
@@ -1138,6 +1178,8 @@ export default {
     .line {
       margin: 2px 0;
       padding: 12px 18px;
+      flex-shrink: 0;
+      overflow-wrap: anywhere;
       transition: 0.5s;
       border-radius: 12px;
 
@@ -1160,7 +1202,7 @@ export default {
 
         span.translation {
           opacity: 0.2;
-          font-size: 0.925em;
+          font-size: 0.75em;
         }
       }
     }
@@ -1242,26 +1284,29 @@ export default {
 }
 
 .lyrics-page.no-lyric {
+  --cover-size: min(54vh, 100vw - var(--page-padding) * 2);
+
   .left-side {
-    transition: all 0.5s;
-    transform: translateX(27vh);
-    margin-right: 0;
+    grid-column: 1 / -1;
+
+    > div {
+      width: var(--cover-size);
+    }
   }
 }
 
 @media (max-aspect-ratio: 10/9) {
-  .left-side {
+  .lyrics-page {
+    grid-template-columns: minmax(0, 600px);
+    column-gap: 0;
+  }
+
+  .lyrics-page:not(.no-lyric) .left-side {
     display: none;
   }
 
-  .right-side .lyrics-container {
-    max-width: 100%;
-  }
-}
-
-@media screen and (min-width: 1200px) {
-  .right-side .lyrics-container {
-    max-width: 600px;
+  .right-side {
+    grid-column: 1;
   }
 }
 

@@ -30,6 +30,7 @@
           type="playlist"
           :cover-hover="false"
           :play-button-size="18"
+          :play-action="playPlaylistByID"
           @click.right="openMenu"
         />
         <div class="info">
@@ -181,12 +182,19 @@
       </div>
 
       <TrackList
+        ref="trackList"
         :id="playlist.id"
         :tracks="filteredTracks"
         type="playlist"
+        sortable
+        :sort-key="sortKey"
+        :sort-direction="sortDirection"
+        :sort-loading="sortLoading"
+        :playlist-track-ids="playbackTrackIds"
         :extra-context-menu-item="
           isUserOwnPlaylist ? ['removeTrackFromPlaylist'] : []
         "
+        @sort-change="changeSort"
       />
 
       <div class="load-more">
@@ -253,6 +261,7 @@ import {
 import { isAccountLoggedIn } from '@/utils/auth';
 import nativeAlert from '@/utils/nativeAlert';
 import locale from '@/locale';
+import { sortPlaylistTracks } from '@/utils/playlistSort';
 
 import ButtonTwoTone from '@/components/ButtonTwoTone.vue';
 import ContextMenu from '@/components/ContextMenu.vue';
@@ -381,6 +390,9 @@ export default {
       },
       showFullDescription: false,
       tracks: [],
+      sortKey: '',
+      sortDirection: 'asc',
+      sortLoading: false,
       loadingMore: false,
       hasMore: false,
       lastLoadedTrackIndex: 9,
@@ -407,7 +419,7 @@ export default {
       );
     },
     filteredTracks() {
-      return this.tracks.filter(
+      return this.sortedTracks.filter(
         track =>
           (track.name &&
             track.name
@@ -425,6 +437,19 @@ export default {
                 .includes(this.searchKeyWords.toLowerCase())
           )
       );
+    },
+    sortedTracks() {
+      return sortPlaylistTracks(
+        this.tracks,
+        this.sortKey,
+        this.sortDirection,
+        this.$i18n.locale
+      );
+    },
+    playbackTrackIds() {
+      return this.sortKey
+        ? this.sortedTracks.map(track => track.id)
+        : this.playlist.trackIds.map(track => track.id);
     },
   },
   created() {
@@ -444,14 +469,41 @@ export default {
   methods: {
     ...mapMutations(['appendTrackToPlayerList']),
     ...mapActions(['playFirstTrackOnList', 'playTrackOnListByID', 'showToast']),
-    playPlaylistByID(trackID = 'first') {
-      let trackIDs = this.playlist.trackIds.map(t => t.id);
+    async playPlaylistByID(trackID = 'first') {
+      if (this.sortKey) await this.loadAllForSort();
+      const trackIDs = this.playbackTrackIds;
+      if (!trackIDs.length) return;
       this.$store.state.player.replacePlaylist(
         trackIDs,
         this.playlist.id,
         'playlist',
         trackID
       );
+    },
+    async changeSort({ key, direction }) {
+      this.sortKey = key;
+      this.sortDirection = direction;
+      if (key) await this.loadAllForSort();
+    },
+    async loadAllForSort() {
+      if (this.sortLoadPromise) return this.sortLoadPromise;
+      this.sortLoading = true;
+      this.sortLoadPromise = (async () => {
+        while (
+          this.sortKey &&
+          this.lastLoadedTrackIndex + 1 < this.playlist.trackIds.length
+        ) {
+          if (!(await this.loadMore(500))) {
+            this.sortKey = '';
+            this.sortDirection = 'asc';
+            break;
+          }
+        }
+      })().finally(() => {
+        this.sortLoading = false;
+        this.sortLoadPromise = null;
+      });
+      return this.sortLoadPromise;
     },
     likePlaylist(toast = false) {
       if (!isAccountLoggedIn()) {
@@ -507,6 +559,7 @@ export default {
         });
     },
     loadMore(loadNum = 100) {
+      if (this.loadMorePromise) return this.loadMorePromise;
       let trackIDs = this.playlist.trackIds.filter((t, index) => {
         if (
           index > this.lastLoadedTrackIndex &&
@@ -516,17 +569,34 @@ export default {
         }
       });
       trackIDs = trackIDs.map(t => t.id);
-      getTrackDetail(trackIDs.join(',')).then(data => {
-        this.tracks = markRaw([...this.tracks, ...data.songs]);
-        cacheLoadedTracks(this.id, this.tracks);
-        this.lastLoadedTrackIndex += trackIDs.length;
+      if (!trackIDs.length) {
+        this.hasMore = false;
         this.loadingMore = false;
-        if (this.lastLoadedTrackIndex + 1 === this.playlist.trackIds.length) {
-          this.hasMore = false;
-        } else {
-          this.hasMore = true;
-        }
-      });
+        return Promise.resolve(true);
+      }
+      this.loadingMore = true;
+      this.loadMorePromise = getTrackDetail(trackIDs.join(','))
+        .then(data => {
+          const songs = new Map(data.songs.map(track => [track.id, track]));
+          this.tracks = markRaw([
+            ...this.tracks,
+            ...trackIDs.map(id => songs.get(id)).filter(Boolean),
+          ]);
+          cacheLoadedTracks(this.id, this.tracks);
+          this.lastLoadedTrackIndex += trackIDs.length;
+          this.hasMore =
+            this.lastLoadedTrackIndex + 1 < this.playlist.trackIds.length;
+          return true;
+        })
+        .catch(() => {
+          this.showToast(this.$t('playlist.sort.loadFailed'));
+          return false;
+        })
+        .finally(() => {
+          this.loadingMore = false;
+          this.loadMorePromise = null;
+        });
+      return this.loadMorePromise;
     },
     openMenu(e) {
       this.$refs.playlistMenu.openMenu(e);
@@ -855,7 +925,8 @@ export default {
 }
 
 .gradient-fog {
-  background: linear-gradient(-180deg, #bcc5ce 0%, #929ead 98%),
+  background:
+    linear-gradient(-180deg, #bcc5ce 0%, #929ead 98%),
     radial-gradient(
       at top left,
       rgba(255, 255, 255, 0.3) 0%,

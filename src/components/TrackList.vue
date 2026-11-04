@@ -71,6 +71,44 @@
       >
     </ContextMenu>
 
+    <div v-if="sortable && type === 'playlist'" class="sort-header">
+      <button
+        class="sort-default"
+        :title="$t('playlist.sort.default')"
+        :aria-label="$t('playlist.sort.default')"
+        @click="$emit('sort-change', { key: '', direction: 'asc' })"
+        >#</button
+      >
+      <span aria-hidden="true"></span>
+      <div
+        v-for="column in sortColumns"
+        :key="column.key"
+        class="sort-column"
+        :class="[column.key, { active: sortKey === column.key }]"
+        :aria-sort="
+          sortKey === column.key
+            ? sortDirection === 'asc'
+              ? 'ascending'
+              : 'descending'
+            : 'none'
+        "
+        role="columnheader"
+      >
+        <button
+          :title="$t('playlist.sort.hint')"
+          @click="toggleSort(column.key)"
+        >
+          {{ $t(`playlist.sort.${column.key}`) }}
+          <span v-if="sortKey === column.key" aria-hidden="true">{{
+            sortDirection === 'asc' ? '↑' : '↓'
+          }}</span>
+        </button>
+      </div>
+      <span class="sort-like">{{ $t('playlist.sort.like') }}</span>
+    </div>
+    <div v-if="sortLoading" class="sort-loading" role="status">
+      {{ $t('playlist.sort.loading') }}
+    </div>
     <div ref="list" :style="listStyles">
       <div v-if="virtualized" :style="topSpacerStyle"></div>
       <TrackListItem
@@ -100,11 +138,17 @@ import { downloadTrack, removeDownloadedTrack } from '@/utils/download';
 
 export default {
   name: 'TrackList',
+  emits: ['sort-change'],
   components: {
     TrackListItem,
     ContextMenu,
   },
   props: {
+    sortable: { type: Boolean, default: false },
+    sortKey: { type: String, default: '' },
+    sortDirection: { type: String, default: 'asc' },
+    sortLoading: { type: Boolean, default: false },
+    playlistTrackIds: { type: Array, default: null },
     tracks: {
       type: Array,
       default: () => {
@@ -173,6 +217,9 @@ export default {
   },
   computed: {
     ...mapState(['liked', 'player', 'settings']),
+    sortColumns() {
+      return [{ key: 'title' }, { key: 'album' }, { key: 'duration' }];
+    },
     isRightClickedTrackLiked() {
       return this.liked.songs.includes(this.rightClickedTrack?.id);
     },
@@ -230,6 +277,9 @@ export default {
     },
   },
   watch: {
+    sortLoading() {
+      this.$nextTick(this.updateViewport);
+    },
     tracks() {
       this.visibleStart = 0;
       this.visibleEnd = 80;
@@ -273,6 +323,14 @@ export default {
   methods: {
     ...mapMutations(['updateModal']),
     ...mapActions(['nextTrack', 'showToast', 'likeATrack']),
+    toggleSort(key) {
+      const reset = this.sortKey === key && this.sortDirection === 'desc';
+      this.$emit('sort-change', {
+        key: reset ? '' : key,
+        direction:
+          this.sortKey === key && this.sortDirection === 'asc' ? 'desc' : 'asc',
+      });
+    },
     scheduleViewportUpdate() {
       if (!this.virtualized || this.scrollFrame) return;
       this.scrollFrame = requestAnimationFrame(() => {
@@ -317,6 +375,10 @@ export default {
       this.rightClickedTrackIndex = -1;
     },
     playThisList(trackID) {
+      if (this.sortKey && this.sortLoading) {
+        this.showToast(this.$t('playlist.sort.loading'));
+        return;
+      }
       if (this.dbclickTrackFunc !== 'none') {
         // Switch the UI to the picked song at once; audio loads behind it.
         const entry = this.tracks.find(t => (t.id || t.songId) === trackID);
@@ -346,7 +408,16 @@ export default {
     },
     playThisListDefault(trackID) {
       if (this.type === 'playlist') {
-        this.player.playPlaylistByID(this.id, trackID);
+        if (this.playlistTrackIds) {
+          this.player.replacePlaylist(
+            this.playlistTrackIds,
+            this.id,
+            'playlist',
+            trackID
+          );
+        } else {
+          this.player.playPlaylistByID(this.id, trackID);
+        }
       } else if (this.type === 'album') {
         this.player.playAlbumByID(this.id, trackID);
       } else if (this.type === 'tracklist' || this.type === 'downloads') {
@@ -482,4 +553,64 @@ export default {
 };
 </script>
 
-<style lang="scss" scoped></style>
+<style lang="scss" scoped>
+.sort-header {
+  display: grid;
+  grid-template-columns: 40px 68px minmax(0, 1fr) minmax(0, 1fr) 80px 60px;
+  align-items: center;
+  padding: 6px 8px 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-secondary-bg);
+  color: var(--color-text);
+  font-size: 13px;
+
+  button {
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    opacity: 0.58;
+
+    &:hover,
+    &:focus-visible {
+      opacity: 1;
+      background: var(--color-secondary-bg);
+    }
+  }
+
+  .sort-column {
+    min-width: 0;
+    button {
+      margin-left: -8px;
+    }
+    &.active button {
+      opacity: 1;
+      color: var(--color-primary);
+    }
+  }
+
+  .duration {
+    grid-column: 6;
+    grid-row: 1;
+    justify-self: end;
+    margin-right: 2px;
+  }
+
+  .sort-like {
+    grid-column: 5;
+    grid-row: 1;
+    justify-self: end;
+    padding-right: 8px;
+    opacity: 0.58;
+  }
+}
+
+.sort-loading {
+  padding: 8px;
+  font-size: 13px;
+  color: var(--color-text);
+  opacity: 0.58;
+}
+</style>

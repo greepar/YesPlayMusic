@@ -67,6 +67,16 @@ export default {
     albumDesc: 'Album Description',
   },
   playlist: {
+    sort: {
+      title: 'Title',
+      album: 'Album',
+      duration: 'Duration',
+      like: 'Liked',
+      default: 'Restore default order',
+      hint: 'Click to cycle ascending, descending and default order',
+      loading: 'Loading the full playlist to sort…',
+      loadFailed: 'Could not load songs. Please try again.',
+    },
     playlist: 'Playlists',
     updatedAt: 'Updated at',
     search: 'Search in playlist',

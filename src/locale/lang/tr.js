@@ -63,6 +63,16 @@ export default {
     released: 'Yayınlandı',
   },
   playlist: {
+    sort: {
+      title: 'Başlık',
+      album: 'Albüm',
+      duration: 'Süre',
+      like: 'Beğenilen',
+      default: 'Varsayılan sırayı geri yükle',
+      hint: 'Artan, azalan ve varsayılan sıra arasında geçiş yap',
+      loading: 'Sıralamak için tüm çalma listesi yükleniyor…',
+      loadFailed: 'Şarkılar yüklenemedi. Lütfen tekrar deneyin.',
+    },
     playlist: 'Çalma Listeleri',
     updatedAt: 'Tarihinde Güncellendş',
     search: 'Çalma Listesinde Ara',

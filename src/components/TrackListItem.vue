@@ -7,14 +7,6 @@
     @mouseover="hover = true"
     @mouseleave="hover = false"
   >
-    <img
-      v-if="!isAlbum"
-      v-virtual-image="activeImgUrl"
-      loading="lazy"
-      decoding="async"
-      :class="{ hover: focus }"
-      @click="goToAlbum"
-    />
     <div v-if="showOrderNumber" class="no">
       <button v-show="focus && playable && !isPlaying" @click="playTrack">
         <svg-icon
@@ -30,6 +22,14 @@
         ></svg-icon>
       </button>
     </div>
+    <img
+      v-if="!isAlbum"
+      v-virtual-image="activeImgUrl"
+      loading="lazy"
+      decoding="async"
+      :class="{ hover: focus }"
+      @click="goToAlbum"
+    />
     <div class="title-and-artist">
       <div class="container">
         <div class="title">
@@ -220,7 +220,9 @@ export default {
       );
     },
     showOrderNumber() {
-      return this.type === 'album';
+      return (
+        this.type === 'album' || (this.isPlaylist && this.$parent.sortable)
+      );
     },
     showAlbumName() {
       return this.type !== 'album' && this.type !== 'tracklist';
@@ -455,6 +457,25 @@ button {
 
 .track.album {
   height: 32px;
+}
+
+.track.playlist {
+  .no {
+    flex: 0 0 28px;
+    margin: 0 12px 0 0;
+  }
+
+  .title-and-artist,
+  .album,
+  .container {
+    min-width: 0;
+  }
+
+  .actions,
+  .time,
+  img {
+    flex-shrink: 0;
+  }
 }
 
 .actions {

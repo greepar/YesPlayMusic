@@ -64,6 +64,16 @@ export default {
     albumDesc: '专辑介绍',
   },
   playlist: {
+    sort: {
+      title: '标题',
+      album: '专辑',
+      duration: '时长',
+      like: '喜欢',
+      default: '恢复默认顺序',
+      hint: '点击切换升序、降序和默认顺序',
+      loading: '正在加载完整歌单以排序…',
+      loadFailed: '歌曲加载失败，请重试',
+    },
     playlist: '歌单',
     updatedAt: '最后更新于',
     search: '搜索歌单音乐',
