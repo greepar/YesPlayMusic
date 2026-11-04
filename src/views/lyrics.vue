@@ -6,10 +6,17 @@
       :class="{ 'no-lyric': noLyric, 'is-mac': isMac }"
       :data-theme="theme"
     >
+      <FluidLyricsBackground
+        v-if="settings.fluidLyricsBackground"
+        :image-url="bgImageUrl"
+        :active="showLyrics && !renderingSuspended"
+        :playing="player.playing"
+      />
       <div
         v-if="
-          (settings.lyricsBackground === 'blur') |
-            (settings.lyricsBackground === 'dynamic')
+          !settings.fluidLyricsBackground &&
+          (settings.lyricsBackground === 'blur' ||
+            settings.lyricsBackground === 'dynamic')
         "
         class="lyrics-background"
         :class="{
@@ -26,7 +33,9 @@
         />
       </div>
       <div
-        v-if="settings.lyricsBackground === true"
+        v-if="
+          !settings.fluidLyricsBackground && settings.lyricsBackground === true
+        "
         class="gradient-background"
         :style="{ background }"
       ></div>
@@ -315,6 +324,7 @@ import { formatTrackTime } from '@/utils/common';
 import { getLyric, getCloudLyric } from '@/api/track';
 import { lyricParser, copyLyric, parseLyric } from '@/utils/lyrics';
 import ButtonIcon from '@/components/ButtonIcon.vue';
+import FluidLyricsBackground from '@/components/FluidLyricsBackground.vue';
 import { Vibrant } from 'node-vibrant/browser';
 import Color from 'color';
 import { isAccountLoggedIn } from '@/utils/auth';
@@ -333,6 +343,7 @@ export default {
     VueSlider,
     ButtonIcon,
     ContextMenu,
+    FluidLyricsBackground,
   },
   data() {
     return {
@@ -469,10 +480,16 @@ export default {
       return this.currentTrack?.al || { id: 0, name: 'unknown' };
     },
     theme() {
-      return this.settings.lyricsBackground === true ? 'dark' : 'auto';
+      return this.settings.fluidLyricsBackground ||
+        this.settings.lyricsBackground === true
+        ? 'dark'
+        : 'auto';
     },
   },
   watch: {
+    'settings.fluidLyricsBackground'() {
+      this.getCoverColor();
+    },
     noLyric() {
       this.$nextTick(() => this.playerLayoutMotion?.refresh());
     },
@@ -838,7 +855,11 @@ export default {
       this.player.switchShuffle();
     },
     getCoverColor() {
-      if (this.settings.lyricsBackground !== true) return;
+      if (
+        this.settings.fluidLyricsBackground ||
+        this.settings.lyricsBackground !== true
+      )
+        return;
       const requestId = ++this.colorRequestId;
       const picUrl = this.currentTrack.al?.picUrl;
       if (!picUrl) {

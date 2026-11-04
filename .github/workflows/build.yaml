@@ -68,6 +68,9 @@ jobs:
         if: runner.os == 'Linux'
         run: npm run test:electron-update-integration
 
+      - name: Verify playlist sorting and fluid background
+        run: npm run test:player-ui
+
       - name: Verify Windows updater download and installer dispatch
         if: runner.os == 'Windows'
         run: npm run test:windows-update-integration

@@ -198,6 +198,11 @@ export default {
     subTitleDefault: 'Show Alias for Subtitle by default',
     enableReversedMode: 'Enable Reversed Mode (Experimental)',
     enableCustomTitlebar: 'Enable custom title bar (Need restart)',
+    fluidLyricsBackground: {
+      text: 'Akışkan arka plan (RNP)',
+      description:
+        'Kapak renkleri yavaşça akar, duraklatıldığında durur. Aşağıdaki şarkı sözü arka planını kullanmak için kapatın.',
+    },
     lyricsBackground: {
       text: 'Şarkı Sözleri Arka Planını Göster',
       off: 'kapalı',

@@ -301,10 +301,31 @@
       </div>
       <div class="item">
         <div class="left">
+          <div class="title">{{
+            $t('settings.fluidLyricsBackground.text')
+          }}</div>
+          <div class="description">{{
+            $t('settings.fluidLyricsBackground.description')
+          }}</div>
+        </div>
+        <div class="right">
+          <div class="toggle">
+            <input
+              id="fluid-lyrics-background"
+              v-model="fluidLyricsBackground"
+              type="checkbox"
+              name="fluid-lyrics-background"
+            />
+            <label for="fluid-lyrics-background"></label>
+          </div>
+        </div>
+      </div>
+      <div class="item">
+        <div class="left">
           <div class="title">{{ $t('settings.lyricsBackground.text') }}</div>
         </div>
         <div class="right">
-          <select v-model="lyricsBackground">
+          <select v-model="lyricsBackground" :disabled="fluidLyricsBackground">
             <option :value="false">
               {{ $t('settings.lyricsBackground.off') }}
             </option>
@@ -1052,6 +1073,17 @@ export default {
       set(value) {
         this.$store.commit('updateSettings', {
           key: 'showLyricsTranslation',
+          value,
+        });
+      },
+    },
+    fluidLyricsBackground: {
+      get() {
+        return this.settings.fluidLyricsBackground === true;
+      },
+      set(value) {
+        this.$store.commit('updateSettings', {
+          key: 'fluidLyricsBackground',
           value,
         });
       },

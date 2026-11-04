@@ -4,6 +4,10 @@ const path = require('node:path');
 function createReleaseNotes(tag, assetNames) {
   if (!/^v\d+\.\d+\.\d+$/.test(tag)) throw new Error(`Invalid release tag: ${tag}`);
   const version = tag.slice(1);
+  const changesPath = path.join(__dirname, 'release-notes', `${tag}.md`);
+  const changes = fs.existsSync(changesPath)
+    ? `\n${fs.readFileSync(changesPath, 'utf8').trim()}\n`
+    : '';
   const link = (names, label) => {
     const name = names.find(name => assetNames.includes(name));
     if (!name) throw new Error(`Missing download artifact: ${names.join(' or ')}`);
@@ -30,7 +34,7 @@ function createReleaseNotes(tag, assetNames) {
 > 已安装支持自动更新的版本，可直接在应用内检查更新。
 
 ---
-`;
+${changes}`;
 }
 
 if (require.main === module) {

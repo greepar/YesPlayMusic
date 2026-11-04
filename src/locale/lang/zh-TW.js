@@ -203,6 +203,11 @@ export default {
     enableReversedMode: '啟用倒序播放功能 (實驗性功能)',
     enableCustomTitlebar: '啟用自訂標題列（重新啟動後生效）',
     showLyricsTime: '顯示目前時間',
+    fluidLyricsBackground: {
+      text: '流光背景（RNP）',
+      description:
+        '隨封面色彩緩慢流動，暫停播放時靜止。關閉後使用下方的歌詞背景設定。',
+    },
     lyricsBackground: {
       text: '顯示歌詞背景',
       off: '關閉',

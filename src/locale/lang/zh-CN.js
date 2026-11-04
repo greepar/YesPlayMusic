@@ -205,6 +205,11 @@ export default {
     subTitleDefault: '副标题使用别名',
     enableReversedMode: '启用倒序播放功能 (实验性功能)',
     enableCustomTitlebar: '启用自定义标题栏 (重启后生效)',
+    fluidLyricsBackground: {
+      text: '流光背景（RNP）',
+      description:
+        '随封面色彩缓慢流动，暂停播放时静止。关闭后使用下方的歌词背景设置。',
+    },
     lyricsBackground: {
       text: '显示歌词背景',
       off: '关闭',

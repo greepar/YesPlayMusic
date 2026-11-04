@@ -205,6 +205,11 @@ export default {
     enableReversedMode: 'Enable Reversed Mode (Experimental)',
     enableCustomTitlebar: 'Enable custom title bar (Need restart)',
     showLyricsTime: 'Display current time',
+    fluidLyricsBackground: {
+      text: 'Fluid background (RNP)',
+      description:
+        'Flowing colors from the cover, still when paused. Turn off to use the lyrics background selected below.',
+    },
     lyricsBackground: {
       text: 'Show Lyrics Background',
       off: 'Off',
