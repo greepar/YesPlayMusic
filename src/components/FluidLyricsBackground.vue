@@ -3,9 +3,14 @@
 <template>
   <div
     class="fluid-background"
-    :class="{ paused: !running }"
+    :class="{ paused: !running, gpu: gpuReady }"
     aria-hidden="true"
   >
+    <canvas
+      ref="gpuCanvas"
+      class="gpu-canvas"
+      :class="{ visible: ready }"
+    ></canvas>
     <svg width="0" height="0" class="fluid-filters">
       <defs>
         <filter
@@ -53,6 +58,7 @@
 
 <script>
 import { createFluidCoverTransition } from '@/utils/fluidCoverTransition';
+import { createFluidGpuRenderer } from '@/utils/fluidGpuRenderer';
 
 let nextBackgroundId = 0;
 
@@ -68,6 +74,7 @@ export default {
       filterPrefix: `lyrics-fluid-${nextBackgroundId++}`,
       seed: Math.floor(Math.random() * 1000),
       ready: false,
+      gpuReady: false,
       loadedUrl: '',
       pageVisible: document.visibilityState !== 'hidden',
       reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -82,6 +89,9 @@ export default {
     },
   },
   watch: {
+    running(value) {
+      this.gpuRenderer?.setRunning(value);
+    },
     imageUrl() {
       this.loadCover();
     },
@@ -98,12 +108,31 @@ export default {
     this.motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     this.motionQuery.addEventListener('change', this.handleMotionChange);
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
-    this.coverTransition = createFluidCoverTransition(this.canvases);
+    this.coverTransition = createFluidCoverTransition(this.canvases, 1200, () =>
+      this.gpuRenderer?.invalidate()
+    );
+    try {
+      this.gpuRenderer = createFluidGpuRenderer(
+        this.$refs.gpuCanvas,
+        this.canvases,
+        {
+          seed: this.seed,
+          onReady: () => {
+            this.gpuReady = true;
+          },
+          onFailure: this.disableGpu,
+        }
+      );
+      this.gpuRenderer?.setRunning(this.running);
+    } catch (_) {
+      this.disableGpu();
+    }
     this.loadCover();
   },
   beforeUnmount() {
     this.cancelImage();
     this.coverTransition?.dispose();
+    this.gpuRenderer?.dispose();
     this.motionQuery.removeEventListener('change', this.handleMotionChange);
     document.removeEventListener(
       'visibilitychange',
@@ -111,6 +140,11 @@ export default {
     );
   },
   methods: {
+    disableGpu() {
+      this.gpuReady = false;
+      this.gpuRenderer?.dispose();
+      this.gpuRenderer = null;
+    },
     setCanvas(element, quadrant) {
       this.canvases[quadrant] = element;
     },
@@ -144,6 +178,7 @@ export default {
       const request = this.imageRequest;
       const url = this.imageUrl;
       const image = new Image();
+      if (this.gpuRenderer) image.crossOrigin = 'anonymous';
       this.pendingImage = image;
       image.decoding = 'async';
       image.onload = () => {
@@ -154,6 +189,15 @@ export default {
         this.pendingImage = null;
       };
       image.onerror = () => {
+        if (
+          request === this.imageRequest &&
+          image.crossOrigin === 'anonymous'
+        ) {
+          this.disableGpu();
+          image.crossOrigin = null;
+          image.src = url;
+          return;
+        }
         if (request === this.imageRequest) this.pendingImage = null;
       };
       // Drawing needs no pixel readback, so even covers without CORS can render.
@@ -216,6 +260,36 @@ canvas {
   }
 }
 
+canvas.gpu-canvas {
+  visibility: hidden;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  animation: none;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+  &.visible {
+    opacity: 1;
+  }
+}
+
+.gpu {
+  canvas.gpu-canvas {
+    visibility: visible;
+  }
+  .fluid-layer {
+    visibility: hidden;
+    .fluid-rotation,
+    canvas {
+      animation-play-state: paused;
+    }
+  }
+  .fluid-overlay {
+    backdrop-filter: none;
+    background: transparent;
+  }
+}
+
 .paused,
 .fluid-layer:not(.visible) {
   .fluid-rotation,
@@ -248,6 +322,9 @@ canvas {
 
 @media (prefers-reduced-motion: reduce) {
   .fluid-layer {
+    transition: none;
+  }
+  canvas.gpu-canvas {
     transition: none;
   }
 }

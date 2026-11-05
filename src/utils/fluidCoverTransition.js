@@ -1,6 +1,10 @@
 // Blend cover colors inside the small source canvases. Keeping the same SVG
 // filter and rotating surfaces avoids a geometry jump or an opacity dip.
-export function createFluidCoverTransition(canvases, duration = 1200) {
+export function createFluidCoverTransition(
+  canvases,
+  duration = 1200,
+  onUpdate = () => {}
+) {
   const contexts = canvases.map(canvas => canvas.getContext('2d'));
   let frame = null;
   let target = null;
@@ -26,6 +30,7 @@ export function createFluidCoverTransition(canvases, duration = 1200) {
       context.globalAlpha = 1;
       context.drawImage(target[index], 0, 0);
     });
+    onUpdate();
   }
 
   return {
@@ -77,6 +82,7 @@ export function createFluidCoverTransition(canvases, duration = 1200) {
           context.drawImage(target[index], 0, 0);
           context.globalAlpha = 1;
         });
+        onUpdate();
         frame = requestAnimationFrame(step);
       };
       frame = requestAnimationFrame(step);
